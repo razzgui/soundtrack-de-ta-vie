@@ -7,8 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>window.L || document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>');</script>
 <style>
-/* Plan: purple night, canvas map in the middle, list of places on the right, replay bar below. Single dark theme on purpose. */
+/* Plan: purple night, real dark map in the middle, places + music on the right, replay bar below. Single dark theme on purpose. */
 :root{
   --bg:#120b1f;
   --surface:#1c1330;
@@ -23,53 +26,79 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.45}
-.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 40px;display:flex;flex-direction:column;gap:18px}
+.wrap{max-width:1200px;margin:0 auto;padding:24px 20px 40px;display:flex;flex-direction:column;gap:18px}
 header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
 h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,4.4vw,44px);line-height:1;margin:0;letter-spacing:-.01em;text-wrap:balance}
 h1 span{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
 .sub{color:var(--muted);margin:8px 0 0;max-width:60ch}
 .controls{display:flex;flex-wrap:wrap;gap:8px}
-button{font:inherit;font-weight:500;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer;transition:background .15s,border-color .15s}
-button:hover{border-color:var(--accent)}
-button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+button,select{font:inherit;font-weight:500;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer;transition:background .15s,border-color .15s}
+button:hover,select:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,summary:focus-visible,select:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 button.primary{background:var(--accent);border-color:var(--accent);color:#1a0b2e}
 button.primary:hover{background:#c58aff}
-button.rec{background:var(--accent-2);border-color:var(--accent-2);color:#2a0618}
+button.rec,button.on{background:var(--accent-2);border-color:var(--accent-2);color:#2a0618}
 button:disabled{opacity:.45;cursor:not-allowed}
-.note{display:none;background:#2a1640;border:1px solid var(--accent);border-radius:12px;padding:10px 14px;color:var(--text)}
+.note{display:none;background:#2a1640;border:1px solid var(--accent);border-radius:12px;padding:10px 14px}
 .note.show{display:block}
-.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#1a0b2e;background:var(--accent-2);border-radius:999px;padding:2px 9px;vertical-align:middle}
-.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
-@media (max-width:860px){.main{grid-template-columns:1fr}}
+.badge{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#1a0b2e;background:var(--accent-2);border-radius:999px;padding:2px 9px;vertical-align:middle}
+.freq{display:inline-block;font-size:12px;font-weight:700;color:var(--accent-2);border:1px solid var(--accent-2);border-radius:999px;padding:0 8px}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+@media (max-width:880px){.main{grid-template-columns:1fr}}
 .mapcard{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column}
-.mapwrap{position:relative;height:440px}
-@media (max-width:600px){.mapwrap{height:330px}}
-canvas{display:block;width:100%;height:100%;cursor:pointer}
-.legend{position:absolute;left:12px;bottom:10px;font-size:12px;color:var(--muted);background:rgba(18,11,31,.75);padding:4px 9px;border-radius:8px}
-.now{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:14px 16px;border-top:1px solid var(--line)}
+.daybar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.daybar label{color:var(--muted);font-size:13px}
+.daybar select{padding:5px 12px;border-radius:10px}
+.daybar .legend{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.mapwrap{position:relative;height:460px}
+@media (max-width:600px){.mapwrap{height:340px}}
+#map{width:100%;height:100%;background:#160e27}
+.pinmode #map{cursor:crosshair}
+.leaflet-container{font-family:var(--body)}
+.leaflet-control-attribution{background:rgba(18,11,31,.75)!important;color:var(--muted)!important}
+.leaflet-control-attribution a{color:var(--accent)!important}
+.leaflet-bar a{background:var(--surface)!important;color:var(--text)!important;border-color:var(--line)!important}
+.tip{background:rgba(18,11,31,.85);border:0;border-radius:6px;color:var(--text);font-weight:600;font-size:12.5px;box-shadow:none;padding:2px 7px}
+.tip.leaflet-tooltip-right:before{display:none}
+.now{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 16px;border-top:1px solid var(--line)}
 .now .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .now .name{font-family:var(--display);font-weight:700;font-size:20px}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);background:#2a1d44;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-variant-numeric:tabular-nums}
-.now a{color:var(--accent-2)}
+.now a,.place a,.lfm a{color:var(--accent-2)}
+#nowSong{font-size:14px}
 .replay{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--line)}
 .replay input{flex:1;accent-color:var(--accent-2)}
 .clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:48px;text-align:right}
-.list{display:flex;flex-direction:column;gap:10px;max-height:640px;overflow-y:auto;padding-right:2px}
-.list h2{font-family:var(--display);font-size:18px;margin:0 0 2px}
-.list .hint{color:var(--muted);font-size:13px;margin:0 0 4px}
+.side{display:flex;flex-direction:column;gap:14px}
+.list{display:flex;flex-direction:column;gap:10px;max-height:620px;overflow-y:auto;padding-right:2px}
+h2{font-family:var(--display);font-size:18px;margin:0}
+.hint{color:var(--muted);font-size:13px;margin:0}
 .place{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
-.place.playing{border-color:var(--c);box-shadow:0 0 0 1px var(--c),0 0 22px -6px var(--c)}
-.row{display:flex;align-items:center;gap:8px}
-.place input[type=text],.place input[type=url]{font:inherit;color:var(--text);background:transparent;border:1px solid transparent;border-radius:8px;padding:3px 6px;width:100%;min-width:0}
+.place.playing,.spotrow.playing{box-shadow:0 0 0 1px var(--c),0 0 22px -6px var(--c)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.place input[type=text],.place input[type=url],.lfm input{font:inherit;color:var(--text);background:transparent;border:1px solid transparent;border-radius:8px;padding:3px 6px;width:100%;min-width:0}
+.place .row:first-child{flex-wrap:nowrap}
 .place input.pname{font-weight:700;font-size:16px}
-.place input:hover{border-color:var(--line)}
-.place input:focus{border-color:var(--accent);outline:none;background:#150d26}
+.place input:hover,.lfm input{border-color:var(--line)}
+.place input:focus,.lfm input:focus{border-color:var(--accent);outline:none;background:#150d26}
 .time{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
-.place button{padding:5px 11px;font-size:13px;flex-shrink:0}
+.place button,.spotrow button{padding:5px 11px;font-size:13px;flex-shrink:0}
+button.star{padding:4px 9px;color:var(--muted)}
+button.star[aria-pressed="true"]{color:#ffd36e;border-color:#ffd36e}
+.heard{font-size:13px;color:var(--text);background:#160e27;border-radius:10px;padding:6px 9px}
+.heard b{color:var(--muted);font-weight:500}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
 details .fields{display:flex;flex-direction:column;gap:4px;margin-top:6px}
-.place a{color:var(--accent-2);font-size:13px;word-break:break-all}
-.empty{color:var(--muted);border:1px dashed var(--line);border-radius:14px;padding:16px}
+.empty{color:var(--muted);border:1px dashed var(--line);border-radius:14px;padding:14px}
+.spots{display:flex;flex-direction:column;gap:6px}
+.spotrow{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 8px 6px 12px}
+.spotrow .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex-shrink:0}
+.spotrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.spotrow .ct{color:var(--muted);font-size:12px;white-space:nowrap}
+.lfm{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+.lfm summary{font-family:var(--display);font-weight:700;font-size:16px;color:var(--text)}
+.lfm .fields{gap:8px}
+.lfm label{font-size:12.5px;color:var(--muted)}
 footer{color:var(--muted);font-size:13px;max-width:75ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -83,8 +112,9 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
     </div>
     <div class="controls">
       <button id="btnRec" class="primary" type="button">Record my day</button>
-      <button id="btnMark" type="button">Mark this place</button>
-      <button id="btnDemo" type="button">Sample day</button>
+      <button id="btnMark" type="button">Save where I am</button>
+      <button id="btnPin" type="button">Add a spot on the map</button>
+      <button id="btnDemo" type="button">Sample days</button>
       <button id="btnClear" type="button">Clear all</button>
     </div>
   </header>
@@ -93,10 +123,12 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
 
   <div class="main">
     <section class="mapcard" aria-label="Map of the day">
-      <div class="mapwrap" id="mapwrap">
-        <canvas id="map"></canvas>
-        <div class="legend" id="legend"></div>
+      <div class="daybar">
+        <label for="daySel">Day</label>
+        <select id="daySel"></select>
+        <span class="legend" id="legend"></span>
       </div>
+      <div class="mapwrap" id="mapwrap"><div id="map"></div></div>
       <div class="now" aria-live="polite">
         <div>
           <div class="lbl">Now playing</div>
@@ -112,26 +144,48 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
       </div>
     </section>
 
-    <aside class="list" id="list" aria-label="Places of the day"></aside>
+    <div class="side">
+      <aside class="list" id="list" aria-label="Places of the day"></aside>
+      <section id="spots" aria-label="Favourite and frequent spots"></section>
+      <details class="lfm" id="lfm">
+        <summary>Connect your music (Last.fm)</summary>
+        <div class="fields">
+          <p class="hint">Link Spotify, Apple Music or YouTube Music to a free <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a> account, then create a free API key at <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api/account/create</a>. Each place will show what you really listened to there.</p>
+          <label for="lfmUser">Last.fm username</label>
+          <input id="lfmUser" type="text" autocomplete="off" placeholder="your-username">
+          <label for="lfmKey">API key</label>
+          <input id="lfmKey" type="text" autocomplete="off" placeholder="32 characters">
+          <button id="btnLfm" class="primary" type="button">Load this day's tracks</button>
+        </div>
+      </details>
+    </div>
   </div>
 
-  <footer>Your location is only used to draw your day and never leaves your browser. Keep the page open while recording: mobile browsers stop the GPS when the screen locks.</footer>
+  <footer>Your location and settings stay in your browser. Keep the page open while recording: mobile browsers stop the GPS when the screen locks. Map © OpenStreetMap contributors © CARTO.</footer>
 </div>
 
 <script>
 (() => {
 const $ = s => document.querySelector(s);
-const STORE = 'sdtv-en-v1';
+if(!window.L){
+  $('#note').textContent='The map library could not load. Your network or an ad blocker may be blocking cdnjs.cloudflare.com and cdn.jsdelivr.net. Try another network, then reload.';
+  $('#note').classList.add('show');
+  return;
+}
+const STORE = 'sdtv-en-v2';
 const PALETTE = ['#b56cff','#ff4fb8','#8a7dff','#e08cff','#ff7ad1','#7a63ff','#d2a8ff','#ff9be0'];
 
 /* ---------- utils ---------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
 function dist(a,b){const r=Math.PI/180,R=6371000;const dLat=(b.lat-a.lat)*r,dLng=(b.lng-a.lng)*r*Math.cos((a.lat+b.lat)/2*r);return R*Math.hypot(dLat,dLng);}
-function keyFor(lat,lng){return Math.round(lat*1500)+':'+Math.round(lng*1000);}
-function colorFor(key){return PALETTE[hashStr(key)%PALETTE.length];}
+function colorFor(id){return PALETTE[hashStr(id)%PALETTE.length];}
 function fmt(t){return new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function dur(ms){const m=Math.round(ms/60000);return m<60?m+' min':Math.floor(m/60)+'h'+(m%60?' '+String(m%60).padStart(2,'0')+'m':'');}
+function dayKey(t){const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function dayLabel(k){const [y,m,d]=k.split('-').map(Number);const dt=new Date(y,m-1,d);const today=dayKey(Date.now());return (k===today?'Today · ':'')+dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}
+function mix(a,b,f){const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));const A=p(a),B=p(b);return 'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*f)).join(',')+')';}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function note(msg){const n=$('#note');n.textContent=msg;n.classList.toggle('show',!!msg);}
 
 /* ---------- music ---------- */
@@ -249,32 +303,57 @@ const Engine={
   }
 };
 
-/* ---------- data ---------- */
+/* ---------- data ----------
+   data = { days: { 'YYYY-MM-DD': { points:[{lat,lng,t}], visits:[{id,spot,start,end}], tracks:[...]|null } },
+            spots: { id: {id,lat,lng,name,fav,pinned,song,url} }, lfm:{user,key}, demo:bool } */
 function save(){try{localStorage.setItem(STORE,JSON.stringify(data));}catch(e){}}
-function load(){try{const d=JSON.parse(localStorage.getItem(STORE));return d&&Array.isArray(d.points)?d:null;}catch(e){return null;}}
+function load(){try{const d=JSON.parse(localStorage.getItem(STORE));return d&&d.days&&d.spots?d:null;}catch(e){return null;}}
 
 function demo(){
   const base={lat:46.7245,lng:6.5320};
-  const d0=new Date();d0.setHours(0,0,0,0);const H=h=>d0.getTime()+h*3600000;
-  const spots={maison:[0,0],gare:[0.0040,0.0055],cours:[0.0105,0.0150],resto:[0.0092,0.0178],parc:[0.0030,-0.0048],pote:[-0.0038,0.0062]};
-  const plan=[['maison','Home',7,8.1],['gare','Station',8.25,8.5],['cours','Class',9,12],['resto','Corner pizzeria',12.15,13],
-              ['cours','Class',13.15,16.4],['parc','Park',17,17.8],['pote',"At a friend's",18.4,21.5],['maison','Home',22,23]];
-  const rng=mulberry32(7),points=[],places=[];
-  plan.forEach(([k,name,a,b],i)=>{
-    const [dla,dln]=spots[k],lat=base.lat+dla,lng=base.lng+dln;
-    if(i>0){
-      const prev=plan[i-1],[pla,pln]=spots[prev[0]],t0=H(prev[3]),t1=H(a);
-      const steps=Math.max(4,Math.round((t1-t0)/60000)),bend=(rng()-0.5)*0.0025;
-      for(let s=1;s<steps;s++){
-        const f=s/steps,off=Math.sin(f*Math.PI)*bend;
-        points.push({lat:base.lat+pla+(dla-pla)*f+off+(rng()-0.5)*0.00008,lng:base.lng+pln+(dln-pln)*f-off+(rng()-0.5)*0.00008,t:t0+(t1-t0)*f});
+  const S={home:[0,0,'Home'],station:[0.0040,0.0055,'Station'],cls:[0.0105,0.0150,'Class'],pizza:[0.0092,0.0178,'Corner pizzeria'],
+           park:[0.0030,-0.0048,'Park'],friend:[-0.0038,0.0062,"At a friend's"],gym:[-0.0050,-0.0030,'Gym'],cafe:[0.0068,0.0102,'Café']};
+  const spots={};
+  Object.entries(S).forEach(([k,[a,b,n]])=>{spots['s-'+k]={id:'s-'+k,lat:base.lat+a,lng:base.lng+b,name:n,fav:k==='home'||k==='park',pinned:false,song:'',url:''};});
+  const plans=[
+    [['home',7,8.1],['station',8.25,8.5],['cls',9,12],['pizza',12.15,13],['cls',13.15,16.4],['park',17,17.8],['friend',18.4,21.5],['home',22,23]],
+    [['home',7.2,8.2],['station',8.35,8.6],['cls',9,12],['cafe',12.2,13],['cls',13.2,16.5],['gym',17.3,19],['home',19.5,23]],
+    [['home',8,9.5],['station',9.7,10],['cls',10.3,12.5],['pizza',12.6,13.4],['cls',13.5,16],['home',16.6,23]]
+  ];
+  const days={},rng=mulberry32(7);
+  plans.forEach((plan,di)=>{
+    const d0=new Date();d0.setHours(0,0,0,0);d0.setDate(d0.getDate()-di);
+    const H=h=>d0.getTime()+h*3600000,points=[],visits=[];
+    plan.forEach(([k,a,b],i)=>{
+      const sp=spots['s-'+k];
+      if(i>0){
+        const pv=spots['s-'+plan[i-1][0]],t0=H(plan[i-1][2]),t1=H(a);
+        const steps=Math.max(4,Math.round((t1-t0)/60000)),bend=(rng()-0.5)*0.0025;
+        for(let s=1;s<steps;s++){
+          const f=s/steps,off=Math.sin(f*Math.PI)*bend;
+          points.push({lat:pv.lat+(sp.lat-pv.lat)*f+off+(rng()-0.5)*0.00008,lng:pv.lng+(sp.lng-pv.lng)*f-off+(rng()-0.5)*0.00008,t:t0+(t1-t0)*f});
+        }
       }
-    }
-    for(let t=H(a);t<=H(b);t+=120000) points.push({lat:lat+(rng()-0.5)*0.0002,lng:lng+(rng()-0.5)*0.0002,t});
-    places.push({id:'d'+i,key:keyFor(lat,lng),lat,lng,start:H(a),end:H(b),name,song:'',url:''});
+      for(let t=H(a);t<=H(b);t+=120000) points.push({lat:sp.lat+(rng()-0.5)*0.0002,lng:sp.lng+(rng()-0.5)*0.0002,t});
+      visits.push({id:'d'+di+'-'+i,spot:sp.id,start:H(a),end:H(b)});
+    });
+    days[dayKey(H(12))]={points,visits,tracks:null};
   });
-  return {points,places,demo:true};
+  return {days,spots,lfm:{user:'',key:''},demo:true};
 }
+
+let data=load()||demo();
+let curDay=Object.keys(data.days).sort().pop()||dayKey(Date.now());
+function D(){return data.days[curDay]||(data.days[curDay]={points:[],visits:[],tracks:null});}
+
+function nearestSpot(lat,lng,max){let best=null,bd=max||100;Object.values(data.spots).forEach(s=>{const d=dist(s,{lat,lng});if(d<bd){bd=d;best=s;}});return best;}
+function newSpot(lat,lng,extra){
+  const id='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  const n=Object.keys(data.spots).length+1;
+  return data.spots[id]=Object.assign({id,lat,lng,name:'Place '+n,fav:false,pinned:false,song:'',url:''},extra||{});
+}
+function daysVisited(id){return Object.values(data.days).filter(d=>d.visits.some(v=>v.spot===id)).length;}
+const isFrequent=s=>daysVisited(s.id)>=3;
 
 function detectStays(points){
   const stays=[];let i=0;
@@ -286,79 +365,100 @@ function detectStays(points){
   }
   return stays;
 }
-function mergePlaces(stays){
-  const old=data.places,out=old.filter(p=>p.manual);
-  stays.forEach(s=>{
-    const prev=old.find(o=>!o.manual&&o.start<=s.end+60000&&o.end>=s.start-60000&&dist(o,s)<120);
-    let p;
-    if(prev){p={...prev,lat:s.lat,lng:s.lng,start:s.start,end:s.end};}
-    else{
-      const key=keyFor(s.lat,s.lng),same=old.concat(out).find(o=>o.key===key&&o.name);
-      p={id:'p'+s.start,key,lat:s.lat,lng:s.lng,start:s.start,end:s.end,name:same?same.name:'Place '+(out.filter(o=>!o.manual).length+1),song:'',url:''};
-    }
-    out.push(p);
+function updateVisits(day){
+  const old=day.visits,out=old.filter(v=>v.manual);
+  detectStays(day.points).forEach(st=>{
+    const prev=old.find(v=>!v.manual&&v.start<=st.end+60000&&v.end>=st.start-60000&&data.spots[v.spot]&&dist(data.spots[v.spot],st)<150);
+    if(prev){out.push(Object.assign({},prev,{start:st.start,end:st.end}));return;}
+    const sp=nearestSpot(st.lat,st.lng)||newSpot(st.lat,st.lng);
+    out.push({id:'v'+st.start,spot:sp.id,start:st.start,end:st.end});
   });
-  return out.sort((a,b)=>a.start-b.start);
+  day.visits=out.sort((a,b)=>a.start-b.start);
 }
-
-let data=load()||demo();
-const themeFor=p=>makeTheme(p.key,new Date(p.start).getHours());
+const themeFor=v=>makeTheme(v.spot,new Date(v.start).getHours());
+const heardAt=(a,b)=>(D().tracks||[]).filter(t=>t.uts>=a&&t.uts<=b);
 
 /* ---------- playback ---------- */
 let nowId=null;
-function playPlace(p){Engine.play(themeFor(p));nowId=p.id;updateNow();}
-function playRoute(t){Engine.play(routeTheme(new Date(t).getHours()));nowId='route';updateNow();}
+function playVisit(v){Engine.play(themeFor(v));nowId=v.id;updateNow();}
+function playRoute(t){Engine.play(routeTheme(new Date(t).getHours()));nowId='route';replay.routeT=t;updateNow();}
 function stopAll(){Engine.stop();nowId=null;updateNow();}
-function togglePlace(p){
-  if(replay.on) stopReplay();
-  if(nowId===p.id&&Engine.playing) stopAll(); else playPlace(p);
+function togglePlace(v){if(replay.on)stopReplay();if(nowId===v.id&&Engine.playing)stopAll();else playVisit(v);}
+function toggleSpot(s){
+  if(replay.on)stopReplay();
+  const id='spot:'+s.id;
+  if(nowId===id&&Engine.playing){stopAll();return;}
+  Engine.play(makeTheme(s.id,new Date().getHours()));nowId=id;updateNow();
+}
+function activeSpotId(){
+  if(!nowId||!Engine.playing)return null;
+  if(nowId.startsWith('spot:'))return nowId.slice(5);
+  const v=D().visits.find(x=>x.id===nowId);return v?v.spot:null;
+}
+function songHTML(s){
+  if(!s)return '';
+  if(s.url&&/^https?:\/\//.test(s.url))return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener">♪ '+esc(s.song||'Your song')+'</a>';
+  return s.song?'♪ '+esc(s.song):'';
+}
+function heardHTML(list,max){
+  if(!list.length)return '';
+  const shown=list.slice(0,max).map(t=>'<a href="'+esc(t.url)+'" target="_blank" rel="noopener">'+esc(t.artist)+' – '+esc(t.name)+'</a>').join(', ');
+  return '<b>Heard here:</b> '+shown+(list.length>max?' +'+(list.length-max)+' more':'');
 }
 function updateNow(){
-  const p=data.places.find(x=>x.id===nowId),chip=$('#nowChip'),song=$('#nowSong');
-  song.textContent='';
+  const chip=$('#nowChip'),song=$('#nowSong'),day=D();
+  song.innerHTML='';
+  const th=Engine.pending||Engine.theme;
   if(nowId==='route'){
-    const th=Engine.pending||Engine.theme;
-    $('#nowName').textContent='On the move';chip.hidden=false;chip.textContent=th?th.mode+' · '+th.bpm+' BPM':'';
-  }else if(p){
-    const th=themeFor(p);
-    $('#nowName').textContent=p.name||'Unnamed place';chip.hidden=false;
-    chip.textContent=th.mode+' · '+th.bpm+' BPM · '+moment(th.hour);
-    if(p.url&&/^https?:\/\//.test(p.url)){
-      const a=document.createElement('a');a.href=p.url;a.target='_blank';a.rel='noopener';a.textContent='♪ '+(p.song||'Your song');song.appendChild(a);
-    }else if(p.song){song.textContent='♪ '+p.song;}
-  }else{$('#nowName').textContent='Nothing yet';chip.hidden=true;}
-  document.querySelectorAll('.place').forEach(el=>{
-    const on=el.dataset.id===nowId;el.classList.toggle('playing',on);
-    el.querySelector('.play').textContent=on?'■ Stop':'▶ Listen';
+    $('#nowName').textContent='On the move';chip.hidden=!th;if(th)chip.textContent=th.mode+' · '+th.bpm+' BPM';
+  }else if(nowId&&nowId.startsWith('spot:')){
+    const s=data.spots[nowId.slice(5)];
+    $('#nowName').textContent=s?s.name:'Spot';chip.hidden=!th;if(th)chip.textContent=th.mode+' · '+th.bpm+' BPM · '+moment(th.hour);
+    song.innerHTML=songHTML(s);
+  }else{
+    const v=day.visits.find(x=>x.id===nowId);
+    if(v){
+      const s=data.spots[v.spot],t=themeFor(v);
+      $('#nowName').textContent=s?s.name:'Place';chip.hidden=false;chip.textContent=t.mode+' · '+t.bpm+' BPM · '+moment(t.hour);
+      song.innerHTML=[songHTML(s),heardHTML(heardAt(v.start,v.end),2)].filter(Boolean).join(' &nbsp; ');
+    }else{$('#nowName').textContent='Nothing yet';chip.hidden=true;}
+  }
+  document.querySelectorAll('[data-play]').forEach(el=>{
+    const on=el.dataset.play===nowId&&Engine.playing;
+    const card=el.closest('.place,.spotrow');if(card)card.classList.toggle('playing',on);
+    el.textContent=on?'■ Stop':'▶ Listen';
   });
 }
 
 /* ---------- replay ---------- */
 const replay={on:false,u:0,last:0,cur:null,segs:[],total:0};
+function dayRange(day){
+  const ts=day.points.map(p=>p.t).concat(day.visits.flatMap(v=>[v.start,v.end]));
+  return ts.length?[Math.min(...ts),Math.max(...ts)]:null;
+}
 function buildSegs(){
-  const segs=[];const pts=data.points,pl=data.places;
-  if(!pts.length&&!pl.length){replay.segs=[];replay.total=0;return;}
-  const startT=Math.min(pts.length?pts[0].t:Infinity,pl.length?pl[0].start:Infinity);
-  const endT=Math.max(pts.length?pts[pts.length-1].t:-Infinity,pl.length?pl[pl.length-1].end:-Infinity);
-  let cursor=startT;
-  pl.forEach(p=>{
-    if(p.start>cursor+60000) segs.push({type:'route',a:cursor,b:p.start,len:4000});
-    segs.push({type:'place',p,a:p.start,b:Math.max(p.end,p.start+1),len:10000});
-    cursor=Math.max(cursor,p.end);
+  const day=D(),r=dayRange(day),segs=[];
+  if(!r){replay.segs=[];replay.total=0;return;}
+  let cursor=r[0];
+  day.visits.forEach(v=>{
+    if(v.start>cursor+60000)segs.push({type:'route',a:cursor,b:v.start,len:4000});
+    segs.push({type:'visit',v,a:v.start,b:Math.max(v.end,v.start+1),len:10000});
+    cursor=Math.max(cursor,v.end);
   });
-  if(endT>cursor+60000||!segs.length) segs.push({type:'route',a:cursor,b:Math.max(endT,cursor+1),len:4000});
+  if(r[1]>cursor+60000||!segs.length)segs.push({type:'route',a:cursor,b:Math.max(r[1],cursor+1),len:4000});
   let acc=0;segs.forEach(s=>{s.u0=acc;acc+=s.len;});
   replay.segs=segs;replay.total=acc;
 }
 function segAt(u){const s=replay.segs;for(let i=0;i<s.length;i++){if(u<s[i].u0+s[i].len)return s[i];}return s[s.length-1];}
 function timeAt(u){const s=segAt(u);if(!s)return null;const f=Math.min(1,Math.max(0,(u-s.u0)/s.len));return s.a+(s.b-s.a)*f;}
+function replayT(){return replay.segs.length&&(replay.on||replay.u>0)?timeAt(replay.u):null;}
 function syncReplay(){
   const s=segAt(replay.u);if(!s)return;
   const T=timeAt(replay.u);
   $('#scrub').value=replay.total?Math.round(replay.u/replay.total*1000):0;
   $('#clock').textContent=fmt(T);
-  const id=s.type==='place'?s.p.id:'route@'+s.a;
-  if(replay.on&&id!==replay.cur){replay.cur=id;if(s.type==='place')playPlace(s.p);else playRoute(T);}
+  const id=s.type==='visit'?s.v.id:'route@'+s.a;
+  if(replay.on&&id!==replay.cur){replay.cur=id;if(s.type==='visit')playVisit(s.v);else playRoute(T);}
 }
 function frame(now){
   if(!replay.on)return;
@@ -376,146 +476,212 @@ function startReplay(){
 function stopReplay(){replay.on=false;$('#btnReplay').textContent='▶ Replay the day';stopAll();}
 
 /* ---------- map ---------- */
-const cv=$('#map'),g=cv.getContext('2d');let W=0,Hh=0,dpr=1;
-function resize(){const r=$('#mapwrap').getBoundingClientRect();dpr=window.devicePixelRatio||1;W=r.width;Hh=r.height;cv.width=W*dpr;cv.height=Hh*dpr;g.setTransform(dpr,0,0,dpr,0,0);}
-new ResizeObserver(resize).observe($('#mapwrap'));resize();
+const map=L.map('map',{zoomControl:true}).setView([46.7245,6.532],14);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  subdomains:'abcd',maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+}).addTo(map);
+const layer=L.layerGroup().addTo(map);
+let trail=[],markers={},head=null,fitFor=null,lastT=undefined;
+new ResizeObserver(()=>map.invalidateSize()).observe($('#mapwrap'));
 
-function projector(){
-  const all=data.points.concat(data.places);
-  if(!all.length)return null;
-  let a=Infinity,b=-Infinity,c=Infinity,d=-Infinity;
-  all.forEach(p=>{a=Math.min(a,p.lat);b=Math.max(b,p.lat);c=Math.min(c,p.lng);d=Math.max(d,p.lng);});
-  const mid=(a+b)/2,k=Math.cos(mid*Math.PI/180);
-  let sx=(d-c)*k,sy=b-a;const minS=0.002;
-  if(sx<minS){const e=(minS-sx)/k/2;c-=e;d+=e;sx=minS;}
-  if(sy<minS){const e=(minS-sy)/2;a-=e;b+=e;sy=minS;}
-  const pad=46,sc=Math.min((W-pad*2)/sx,(Hh-pad*2)/sy);
-  const ox=(W-sx*sc)/2,oy=(Hh-sy*sc)/2;
-  return p=>({x:ox+(p.lng-c)*k*sc,y:oy+(b-p.lat)*sc});
+function drawMap(){
+  layer.clearLayers();trail=[];markers={};lastT=undefined;
+  const day=D(),pts=day.points;
+  if(pts.length>1){
+    const t0=pts[0].t,t1=pts[pts.length-1].t,size=Math.max(1,Math.ceil(pts.length/30));
+    for(let i=0;i<pts.length-1;i+=size){
+      const chunk=pts.slice(i,Math.min(pts.length,i+size+1));
+      const pl=L.polyline(chunk.map(p=>[p.lat,p.lng]),{color:mix('#b56cff','#ff4fb8',(chunk[0].t-t0)/((t1-t0)||1)),weight:4,opacity:.85,interactive:false}).addTo(layer);
+      pl._tEnd=chunk[chunk.length-1].t;trail.push(pl);
+    }
+  }
+  const visited=new Set(day.visits.map(v=>v.spot));
+  Object.values(data.spots).forEach(s=>{
+    const here=visited.has(s.id);if(!here&&!s.fav&&!s.pinned)return;
+    const total=day.visits.filter(v=>v.spot===s.id).reduce((a,v)=>a+v.end-v.start,0);
+    const r=here?8+Math.min(8,Math.log2(1+total/600000)*2.5):6;
+    const m=L.circleMarker([s.lat,s.lng],{radius:r,color:'#120b1f',weight:2,fillColor:colorFor(s.id),fillOpacity:here?1:.5,bubblingMouseEvents:false}).addTo(layer);
+    m._r=r;
+    m.bindTooltip((s.fav?'★ ':'')+esc(s.name)+(isFrequent(s)?' · frequent':''),{permanent:true,direction:'right',offset:[r,0],className:'tip'});
+    m.on('click',()=>{const v=[...day.visits].reverse().find(x=>x.spot===s.id);if(v)togglePlace(v);else toggleSpot(s);});
+    markers[s.id]=m;
+  });
+  head=L.circleMarker([0,0],{radius:6,color:'#ff4fb8',weight:3,fillColor:'#fff',fillOpacity:1,interactive:false});
+  if(fitFor!==curDay){
+    fitFor=curDay;
+    const ll=pts.map(p=>[p.lat,p.lng]).concat([...visited].map(id=>[data.spots[id].lat,data.spots[id].lng]));
+    if(ll.length)map.fitBounds(ll,{padding:[40,40],maxZoom:16});
+    else{const any=Object.values(data.spots)[0];if(any)map.setView([any.lat,any.lng],15);}
+  }
 }
 function posAt(T){
-  const pts=data.points;if(!pts.length)return null;
+  const pts=D().points;if(!pts.length)return null;
   if(T<=pts[0].t)return pts[0];if(T>=pts[pts.length-1].t)return pts[pts.length-1];
   let lo=0,hi=pts.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(pts[m].t<=T)lo=m;else hi=m;}
   const A=pts[lo],B=pts[hi],f=(T-A.t)/((B.t-A.t)||1);return {lat:A.lat+(B.lat-A.lat)*f,lng:A.lng+(B.lng-A.lng)*f};
 }
 const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let hits=[];
-function draw(now){
-  g.clearRect(0,0,W,Hh);g.fillStyle='#160e27';g.fillRect(0,0,W,Hh);
-  g.fillStyle='#2a1d44';for(let x=12;x<W;x+=24)for(let y=12;y<Hh;y+=24)g.fillRect(x,y,1.5,1.5);
-  const P=projector();hits=[];
-  if(!P){g.fillStyle='#a898c8';g.font='15px DM Sans, sans-serif';g.textAlign='center';g.fillText('Start recording or load the sample day',W/2,Hh/2);requestAnimationFrame(draw);return;}
-  const pts=data.points,T=replay.segs.length&&(replay.on||replay.u>0)?timeAt(replay.u):null;
-  if(pts.length>1){
-    const t0=pts[0].t,t1=pts[pts.length-1].t||t0+1;
-    g.lineWidth=3;g.lineCap='round';g.lineJoin='round';
-    for(let i=1;i<pts.length;i++){
-      const A=P(pts[i-1]),B=P(pts[i]),f=(pts[i].t-t0)/((t1-t0)||1);
-      const past=T===null||pts[i].t<=T;
-      g.strokeStyle=`rgba(${Math.round(181+74*f)},${Math.round(108-29*f)},${Math.round(255-71*f)},${past?0.85:0.22})`;
-      g.beginPath();g.moveTo(A.x,A.y);g.lineTo(B.x,B.y);g.stroke();
-    }
+function animate(now){
+  const T=replayT();
+  if(T!==lastT){
+    lastT=T;
+    trail.forEach(pl=>pl.setStyle({opacity:T===null||pl._tEnd<=T?.85:.22}));
+    if(T!==null){const p=posAt(T);if(p){head.setLatLng([p.lat,p.lng]);if(!layer.hasLayer(head))head.addTo(layer);}}
+    else if(head&&layer.hasLayer(head))layer.removeLayer(head);
   }
-  const groups={};
-  data.places.forEach(p=>{(groups[p.key]=groups[p.key]||[]).push(p);});
-  const playing=data.places.find(p=>p.id===nowId);
-  const beat=Engine.theme?60/Engine.theme.bpm:1;
-  Object.values(groups).forEach(list=>{
-    const p=list[0],q=P(p),col=colorFor(p.key);
-    const total=list.reduce((s,x)=>s+(x.end-x.start),0);
-    const r=8+Math.min(10,Math.log2(1+total/600000)*3);
-    const active=playing&&playing.key===p.key&&Engine.playing;
-    if(active){
-      const ph=reduce?0.5:((now/1000)%beat)/beat;
-      g.beginPath();g.arc(q.x,q.y,r+6+ph*16,0,Math.PI*2);g.strokeStyle=col;g.globalAlpha=1-ph;g.lineWidth=2;g.stroke();g.globalAlpha=1;
-    }
-    const grd=g.createRadialGradient(q.x,q.y,0,q.x,q.y,r*2.4);grd.addColorStop(0,col+'88');grd.addColorStop(1,col+'00');
-    g.fillStyle=grd;g.beginPath();g.arc(q.x,q.y,r*2.4,0,Math.PI*2);g.fill();
-    g.fillStyle=col;g.beginPath();g.arc(q.x,q.y,r,0,Math.PI*2);g.fill();
-    g.strokeStyle='#120b1f';g.lineWidth=2;g.stroke();
-    g.font='600 13px DM Sans, sans-serif';g.textAlign='left';g.textBaseline='middle';
-    const label=(p.name||'Place')+(list.length>1?'  ×'+list.length:'');
-    const tx=q.x+r+7,tw=g.measureText(label).width;
-    g.fillStyle='rgba(18,11,31,.78)';g.fillRect(tx-4,q.y-10,tw+8,20);
-    g.fillStyle='#f1eaff';g.fillText(label,tx,q.y);
-    hits.push({x:q.x,y:q.y,r:r+8,list});
+  const sid=activeSpotId();
+  Object.entries(markers).forEach(([id,m])=>{
+    if(id===sid&&Engine.theme){
+      const beat=60/Engine.theme.bpm,ph=reduce?0.5:((now/1000)%beat)/beat;
+      m.setRadius(m._r+5*(1-ph));if(m.options.color!=='#ffffff')m.setStyle({color:'#ffffff'});
+    }else if(m.options.radius!==m._r||m.options.color!=='#120b1f'){m.setRadius(m._r);m.setStyle({color:'#120b1f'});}
   });
-  if(T!==null){
-    const pos=posAt(T);
-    if(pos){const q=P(pos);g.fillStyle='#fff';g.beginPath();g.arc(q.x,q.y,5,0,Math.PI*2);g.fill();g.strokeStyle='#ff4fb8';g.lineWidth=3;g.stroke();}
-  }
-  requestAnimationFrame(draw);
+  requestAnimationFrame(animate);
 }
-requestAnimationFrame(draw);
-cv.addEventListener('click',e=>{
-  const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;
-  const h=hits.find(h=>Math.hypot(h.x-x,h.y-y)<=h.r);
-  if(h){const cur=h.list.find(p=>p.id===nowId);togglePlace(cur||h.list[0]);}
+requestAnimationFrame(animate);
+
+let pinMode=false;
+function setPin(on){pinMode=on;document.body.classList.toggle('pinmode',on);const b=$('#btnPin');b.classList.toggle('on',on);b.textContent=on?'Click on the map…':'Add a spot on the map';}
+map.on('click',e=>{
+  if(!pinMode)return;
+  setPin(false);
+  const s=nearestSpot(e.latlng.lat,e.latlng.lng,40)||newSpot(e.latlng.lat,e.latlng.lng,{name:'New spot'});
+  s.pinned=true;s.fav=true;save();refresh();
+  note('Spot saved as a favourite. Rename it in "Favourite & frequent spots".');
 });
 
-/* ---------- list ---------- */
+/* ---------- side panel ---------- */
 function renderList(){
   const el=$('#list');
-  if(el.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
-  el.innerHTML='';
-  const h=document.createElement('div');
-  h.innerHTML='<h2>Your places '+(data.demo?'<span class="badge">sample</span>':'')+'</h2><p class="hint">Rename a place, attach a real song, hit ▶ to hear its melody.</p>';
-  el.appendChild(h);
-  if(!data.places.length){
+  if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement.closest('.side'))return;
+  const day=D();
+  el.innerHTML='<div><h2>Your places '+(data.demo?'<span class="badge">sample</span>':'')+'</h2><p class="hint">Rename a place, star it, attach a real song, hit ▶ to hear its melody.</p></div>';
+  if(!day.visits.length){
     const e=document.createElement('div');e.className='empty';
-    e.textContent=data.points.length?'No stop detected yet. A place shows up once you stay about 4 minutes in the same spot.':'No places yet.';
+    e.textContent=day.points.length?'No stop detected yet. A place shows up once you stay about 4 minutes in the same spot.':'No places on this day yet.';
     el.appendChild(e);
   }
-  data.places.forEach(p=>{
-    const th=themeFor(p),c=document.createElement('div');
-    c.className='place';c.dataset.id=p.id;c.style.setProperty('--c',colorFor(p.key));
-    c.innerHTML=`
-      <div class="row"><input class="pname" type="text" id="n-${p.id}" aria-label="Place name"><button class="play" type="button">▶ Listen</button></div>
-      <div class="row"><span class="time">${fmt(p.start)} → ${fmt(p.end)} · ${dur(p.end-p.start)}</span></div>
-      <div class="row"><span class="chip">${th.mode} · ${th.bpm} BPM · ${moment(th.hour)}</span></div>
-      <details><summary>Attach a real song</summary><div class="fields">
-        <input type="text" id="s-${p.id}" placeholder="Title – artist" aria-label="Song title">
-        <input type="url" id="u-${p.id}" placeholder="YouTube, Spotify link…" aria-label="Song link">
-      </div></details>`;
-    const n=c.querySelector('.pname'),s=c.querySelector('#s-'+p.id),u=c.querySelector('#u-'+p.id);
-    n.value=p.name||'';s.value=p.song||'';u.value=p.url||'';
-    if(p.song||p.url)c.querySelector('details').open=true;
-    n.addEventListener('input',()=>{p.name=n.value;save();if(nowId===p.id)updateNow();});
-    s.addEventListener('input',()=>{p.song=s.value;save();if(nowId===p.id)updateNow();});
-    u.addEventListener('change',()=>{p.url=u.value.trim();save();if(nowId===p.id)updateNow();});
-    c.querySelector('.play').addEventListener('click',()=>togglePlace(p));
+  day.visits.forEach(v=>{
+    const s=data.spots[v.spot];if(!s)return;
+    const th=themeFor(v),c=document.createElement('div'),heard=heardAt(v.start,v.end);
+    c.className='place';c.style.setProperty('--c',colorFor(s.id));
+    c.innerHTML=
+      '<div class="row"><input class="pname" type="text" id="n-'+v.id+'" data-spot="'+s.id+'" aria-label="Place name">'
+      +'<button class="star" type="button" aria-pressed="'+!!s.fav+'" aria-label="Favourite" title="Favourite">'+(s.fav?'★':'☆')+'</button>'
+      +'<button type="button" data-play="'+v.id+'">▶ Listen</button></div>'
+      +'<div class="row"><span class="time">'+fmt(v.start)+' → '+fmt(v.end)+' · '+dur(v.end-v.start)+'</span>'+(isFrequent(s)?'<span class="freq">Frequent · '+daysVisited(s.id)+' days</span>':'')+'</div>'
+      +'<div class="row"><span class="chip">'+th.mode+' · '+th.bpm+' BPM · '+moment(th.hour)+'</span></div>'
+      +(heard.length?'<div class="heard">'+heardHTML(heard,3)+'</div>':'')
+      +'<details><summary>Attach a real song</summary><div class="fields">'
+      +'<input type="text" id="s-'+v.id+'" placeholder="Title – artist" aria-label="Song title">'
+      +'<input type="url" id="u-'+v.id+'" placeholder="YouTube, Spotify link…" aria-label="Song link"></div></details>';
+    const n=c.querySelector('.pname'),st=c.querySelector('#s-'+v.id),u=c.querySelector('#u-'+v.id);
+    n.value=s.name;st.value=s.song||'';u.value=s.url||'';
+    if(s.song||s.url)c.querySelector('details').open=true;
+    n.addEventListener('input',()=>{
+      s.name=n.value;save();
+      document.querySelectorAll('.pname[data-spot="'+s.id+'"]').forEach(o=>{if(o!==n)o.value=n.value;});
+      updateNow();
+    });
+    n.addEventListener('change',()=>{drawMap();renderSpots();});
+    st.addEventListener('input',()=>{s.song=st.value;save();updateNow();});
+    u.addEventListener('change',()=>{s.url=u.value.trim();save();updateNow();});
+    c.querySelector('.star').addEventListener('click',()=>{s.fav=!s.fav;save();refresh();});
+    c.querySelector('[data-play]').addEventListener('click',()=>togglePlace(v));
     el.appendChild(c);
   });
-  updateNow();
+}
+function renderSpots(){
+  const el=$('#spots');
+  const list=Object.values(data.spots).filter(s=>s.fav||isFrequent(s)).sort((a,b)=>daysVisited(b.id)-daysVisited(a.id));
+  el.innerHTML='<div style="margin-bottom:8px"><h2>Favourite &amp; frequent spots</h2><p class="hint">Star a place, add one on the map, or visit it on 3 different days.</p></div>';
+  const box=document.createElement('div');box.className='spots';el.appendChild(box);
+  if(!list.length){box.innerHTML='<div class="empty">None yet.</div>';return;}
+  list.forEach(s=>{
+    const r=document.createElement('div'),n=daysVisited(s.id);
+    r.className='spotrow';r.style.setProperty('--c',colorFor(s.id));
+    r.innerHTML='<span class="dot"></span><span class="nm">'+(s.fav?'★ ':'')+esc(s.name)+'</span>'
+      +'<span class="ct">'+(n?n+' day'+(n>1?'s':''):'not visited yet')+'</span>'
+      +(isFrequent(s)?'<span class="freq">Frequent</span>':'')
+      +'<button type="button" data-play="spot:'+s.id+'">▶ Listen</button>';
+    r.querySelector('button').addEventListener('click',()=>toggleSpot(s));
+    r.querySelector('.nm').addEventListener('click',()=>map.setView([s.lat,s.lng],16));
+    box.appendChild(r);
+  });
+}
+function renderDays(){
+  const sel=$('#daySel'),keys=Object.keys(data.days).filter(k=>data.days[k].points.length||data.days[k].visits.length).sort().reverse();
+  if(!keys.includes(curDay))keys.unshift(curDay);
+  sel.innerHTML=keys.map(k=>'<option value="'+k+'"'+(k===curDay?' selected':'')+'>'+dayLabel(k)+'</option>').join('');
 }
 function legend(){
-  const n=data.places.length,keys=new Set(data.places.map(p=>p.key)).size;
-  $('#legend').textContent=data.points.length?`${n} stop${n>1?'s':''} · ${keys} place${keys>1?'s':''} · ${data.points.length} GPS points`:'';
+  const day=D(),n=day.visits.length,p=new Set(day.visits.map(v=>v.spot)).size;
+  $('#legend').textContent=day.points.length?n+' stop'+(n!==1?'s':'')+' · '+p+' place'+(p!==1?'s':'')+' · '+day.points.length+' GPS points':'';
 }
-function refresh(){buildSegs();renderList();legend();$('#btnReplay').disabled=!replay.total;if(!replay.on){replay.u=0;$('#scrub').value=0;$('#clock').textContent=replay.total?fmt(timeAt(0)):'--:--';}}
+function refresh(){
+  buildSegs();renderDays();renderList();renderSpots();legend();drawMap();updateNow();
+  $('#btnReplay').disabled=!replay.total;
+  if(!replay.on){replay.u=0;$('#scrub').value=0;$('#clock').textContent=replay.total?fmt(timeAt(0)):'--:--';}
+}
+
+/* ---------- Last.fm ---------- */
+$('#lfmUser').value=data.lfm.user||'';$('#lfmKey').value=data.lfm.key||'';
+$('#lfmUser').addEventListener('change',e=>{data.lfm.user=e.target.value.trim();save();});
+$('#lfmKey').addEventListener('change',e=>{data.lfm.key=e.target.value.trim();save();});
+async function loadTracks(){
+  data.lfm.user=$('#lfmUser').value.trim();data.lfm.key=$('#lfmKey').value.trim();save();
+  const {user,key}=data.lfm;
+  if(!user||!key){note('Enter your Last.fm username and API key first.');return;}
+  const day=D(),r=dayRange(day);
+  if(!r){note('Nothing recorded on this day yet, so there is no time range to match tracks with.');return;}
+  const btn=$('#btnLfm');btn.disabled=true;btn.textContent='Loading…';
+  try{
+    let all=[],page=1,pages=1;
+    do{
+      const url='https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&format=json&limit=200'
+        +'&user='+encodeURIComponent(user)+'&api_key='+encodeURIComponent(key)
+        +'&from='+Math.floor(r[0]/1000)+'&to='+Math.ceil(r[1]/1000)+'&page='+page;
+      const j=await (await fetch(url)).json();
+      if(j.error)throw new Error(j.message);
+      let list=(j.recenttracks&&j.recenttracks.track)||[];if(!Array.isArray(list))list=[list];
+      all=all.concat(list);
+      pages=Math.min(5,+((j.recenttracks&&j.recenttracks['@attr']&&j.recenttracks['@attr'].totalPages)||1));
+      page++;
+    }while(page<=pages);
+    day.tracks=all.filter(t=>t.date).map(t=>({artist:(t.artist&&(t.artist['#text']||t.artist.name))||'',name:t.name,url:t.url,uts:+t.date.uts*1000})).sort((a,b)=>a.uts-b.uts);
+    save();refresh();
+    note(day.tracks.length?day.tracks.length+' tracks loaded. Each place now shows what you heard there.':'No tracks were scrobbled during this day.');
+  }catch(e){
+    note('Last.fm: '+(e.message||'could not load tracks')+'. Check your username and API key.');
+  }finally{btn.disabled=false;btn.textContent="Load this day's tracks";}
+}
+$('#btnLfm').addEventListener('click',loadTracks);
 
 /* ---------- GPS ---------- */
 let watchId=null;
 function setRec(on){const b=$('#btnRec');b.textContent=on?'■ Stop recording':'Record my day';b.classList.toggle('rec',on);b.classList.toggle('primary',!on);}
 function onPos(pos){
   const pt={lat:pos.coords.latitude,lng:pos.coords.longitude,t:Date.now()};
-  if(data.demo){data={points:[],places:[],demo:false};}
-  const last=data.points[data.points.length-1];
+  if(data.demo){data={days:{},spots:{},lfm:data.lfm,demo:false};}
+  const k=dayKey(pt.t);
+  if(curDay!==k){curDay=k;fitFor=null;}
+  const day=D(),last=day.points[day.points.length-1];
   if(!last||dist(last,pt)>12||pt.t-last.t>60000){
-    data.points.push(pt);data.places=mergePlaces(detectStays(data.points));save();refresh();
+    day.points.push(pt);updateVisits(day);save();
+    if(day.points.length===1)fitFor=null;
+    refresh();
   }
-  note('');
+  note('Recording… keep this page open.');
 }
 function onErr(e){
   stopGPS();
   note(e.code===1
-    ?'Location access was denied. Allow it in your browser settings, or host the page over HTTPS (GitHub Pages, Netlify…). The sample day works in the meantime.'
+    ?'Location access was denied. Allow it in your browser settings and make sure the page is opened over HTTPS. The sample days work in the meantime.'
     :'Could not find your position. Try again outside or with GPS turned on.');
 }
 function startGPS(){
   if(!('geolocation' in navigator)){note("Your browser doesn't give access to your location.");return;}
-  try{watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:10000,timeout:30000});setRec(true);note('Recording… keep this page open.');}
+  try{watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:10000,timeout:30000});setRec(true);note('Waiting for your position…');}
   catch(e){onErr({code:1});}
 }
 function stopGPS(){if(watchId!==null){try{navigator.geolocation.clearWatch(watchId);}catch(e){}}watchId=null;setRec(false);}
@@ -523,26 +689,29 @@ function stopGPS(){if(watchId!==null){try{navigator.geolocation.clearWatch(watch
 /* ---------- buttons ---------- */
 $('#btnRec').addEventListener('click',()=>watchId===null?startGPS():(stopGPS(),note('')));
 $('#btnMark').addEventListener('click',()=>{
-  if(data.demo||!data.points.length){note('Start recording first: marking a place needs your current position.');return;}
-  const l=data.points[data.points.length-1],t=Date.now();
-  const key=keyFor(l.lat,l.lng),same=data.places.find(o=>o.key===key&&o.name);
-  data.places.push({id:'m'+t,key,lat:l.lat,lng:l.lng,start:t,end:t+300000,name:same?same.name:'Marked place',song:'',url:'',manual:true});
-  data.places.sort((a,b)=>a.start-b.start);save();refresh();
+  const day=data.demo?null:D(),l=day&&day.points[day.points.length-1];
+  if(!l){note('Start recording first: saving where you are needs your current position. You can also use "Add a spot on the map".');return;}
+  const s=nearestSpot(l.lat,l.lng,60)||newSpot(l.lat,l.lng,{name:'Saved spot'});
+  s.pinned=true;s.fav=true;save();refresh();
+  note('Saved as a favourite. Rename it in "Favourite & frequent spots".');
 });
-$('#btnDemo').addEventListener('click',()=>{stopGPS();if(replay.on)stopReplay();stopAll();data=demo();save();refresh();note('');});
+$('#btnPin').addEventListener('click',()=>setPin(!pinMode));
+$('#btnDemo').addEventListener('click',()=>{stopGPS();if(replay.on)stopReplay();stopAll();const lfm=data.lfm;data=demo();data.lfm=lfm;curDay=Object.keys(data.days).sort().pop();fitFor=null;save();refresh();note('');});
 let clearArmed=null;
 $('#btnClear').addEventListener('click',e=>{
   const b=e.currentTarget;
   if(!clearArmed){b.textContent='Sure? Click again';clearArmed=setTimeout(()=>{b.textContent='Clear all';clearArmed=null;},3000);return;}
   clearTimeout(clearArmed);clearArmed=null;b.textContent='Clear all';
-  stopGPS();if(replay.on)stopReplay();stopAll();data={points:[],places:[],demo:false};save();refresh();
+  stopGPS();if(replay.on)stopReplay();stopAll();
+  data={days:{},spots:{},lfm:data.lfm,demo:false};curDay=dayKey(Date.now());fitFor=null;save();refresh();
 });
+$('#daySel').addEventListener('change',e=>{if(replay.on)stopReplay();stopAll();curDay=e.target.value;fitFor=null;refresh();});
 $('#btnReplay').addEventListener('click',()=>replay.on?stopReplay():startReplay());
 $('#scrub').addEventListener('input',e=>{
   buildSegs();if(!replay.total)return;
   replay.u=e.target.value/1000*(replay.total-1);
-  if(replay.on){replay.cur=null;}
-  const T=timeAt(replay.u);$('#clock').textContent=fmt(T);
+  if(replay.on)replay.cur=null;
+  $('#clock').textContent=fmt(timeAt(replay.u));
   if(replay.on)syncReplay();
 });
 
