@@ -53,6 +53,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .mapwrap{position:relative;height:460px}
 @media (max-width:600px){.mapwrap{height:340px}}
 #map{width:100%;height:100%;background:#160e27}
+.leaflet-tile-pane{filter:invert(1) hue-rotate(200deg) brightness(.8) saturate(.7);}
 .pinmode #map{cursor:crosshair}
 .leaflet-container{font-family:var(--body)}
 .leaflet-control-attribution{background:rgba(18,11,31,.75)!important;color:var(--muted)!important}
@@ -477,8 +478,8 @@ function stopReplay(){replay.on=false;$('#btnReplay').textContent='▶ Replay th
 
 /* ---------- map ---------- */
 const map=L.map('map',{zoomControl:true}).setView([46.7245,6.532],14);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-  subdomains:'abcd',maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 const layer=L.layerGroup().addTo(map);
 let trail=[],markers={},head=null,fitFor=null,lastT=undefined;
