@@ -26,6 +26,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 40px;display:flex;flex-direction:column;gap:18px}
 header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
@@ -42,6 +43,11 @@ button.rec,button.on{background:var(--accent-2);border-color:var(--accent-2);col
 button:disabled{opacity:.45;cursor:not-allowed}
 .note{display:none;background:#2a1640;border:1px solid var(--accent);border-radius:12px;padding:10px 14px}
 .note.show{display:block}
+.welcome{display:none;gap:16px 24px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:radial-gradient(120% 140% at 0% 0%,#4a1d6e 0%,#2a1640 55%,#1c1330 100%);border:1px solid var(--accent);border-radius:18px;padding:18px 20px}
+.welcome.show{display:flex}
+.welcome h2{font-size:22px}
+.welcome p{margin:6px 0 0;color:var(--text);max-width:62ch}
+.welcome .steps{color:var(--muted);font-size:13px;margin-top:6px}
 .viewbar{display:none;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(90deg,#3a1650,#2a1640);border:1px solid var(--accent-2);border-radius:12px;padding:10px 14px}
 .viewbar.show{display:flex}
 .viewbar b{font-family:var(--display)}
@@ -138,6 +144,18 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
   </header>
 
   <div id="note" class="note" role="status"></div>
+  <section id="welcome" class="welcome" aria-label="Make it yours">
+    <div>
+      <h2>Make it yours</h2>
+      <p>You are looking at three sample days. The real thing is your own life: record a day and every place you stop at gets its own melody.</p>
+      <p class="steps">The sample disappears as soon as your first position arrives. Places you pinned stay.</p>
+    </div>
+    <div class="btnrow">
+      <button id="wRec" class="primary" type="button">Record my first day</button>
+      <button id="wBlank" type="button">Start with an empty map</button>
+      <button id="wHide" type="button">Explore the sample first</button>
+    </div>
+  </section>
   <div id="viewbar" class="viewbar" role="status">
     <span id="viewText"></span>
     <button id="btnBack" type="button">← Back to my days</button>
@@ -338,37 +356,109 @@ const Engine={
 function save(){try{localStorage.setItem(STORE,JSON.stringify(data));}catch(e){}}
 function load(){try{const d=JSON.parse(localStorage.getItem(STORE));return d&&d.days&&d.spots?d:null;}catch(e){return null;}}
 
-function demo(){
-  const base={lat:46.7245,lng:6.5320};
-  const S={home:[0,0,'Home'],station:[0.0040,0.0055,'Station'],cls:[0.0105,0.0150,'Class'],pizza:[0.0092,0.0178,'Corner pizzeria'],
-           park:[0.0030,-0.0048,'Park'],friend:[-0.0038,0.0062,"At a friend's"],gym:[-0.0050,-0.0030,'Gym'],cafe:[0.0068,0.0102,'Café']};
+/* Sample days. Spots start at rough offsets around Orbe; once a routing server answers,
+   they are snapped to real streets and the trips follow real walking paths (cached). */
+const DEMO_BASE={lat:46.7245,lng:6.5320};
+const DEMO_SPOTS={home:[0,0,'Home'],station:[0.0040,0.0055,'Station'],cls:[0.0105,0.0150,'Class'],pizza:[0.0092,0.0178,'Corner pizzeria'],
+  park:[0.0030,-0.0048,'Park'],friend:[-0.0038,0.0062,"At a friend's"],gym:[-0.0050,-0.0030,'Gym'],cafe:[0.0068,0.0102,'Café']};
+const DEMO_PLANS=[
+  [['home',7,8.1],['station',8.25,8.5],['cls',9,12],['pizza',12.15,13],['cls',13.15,16.4],['park',17,17.8],['friend',18.4,21.5],['home',22,23]],
+  [['home',7.2,8.2],['station',8.35,8.6],['cls',9,12],['cafe',12.2,13],['cls',13.2,16.5],['gym',17.3,19],['home',19.5,23]],
+  [['home',8,9.5],['station',9.7,10],['cls',10.3,12.5],['pizza',12.6,13.4],['cls',13.5,16],['home',16.6,23]]
+];
+const DEMO_CACHE='sdtv-demo-routes-v1';
+function demoCache(){try{const c=JSON.parse(localStorage.getItem(DEMO_CACHE));return c&&c.spots&&c.legs?c:null;}catch(e){return null;}}
+function alongPath(path,t0,t1,rng){
+  const cum=[0];for(let i=1;i<path.length;i++)cum.push(cum[i-1]+dist(path[i-1],path[i]));
+  const total=cum[cum.length-1]||1,n=Math.max(4,Math.round((t1-t0)/45000)),out=[];
+  let j=1;
+  for(let s=1;s<n;s++){
+    const target=total*s/n;
+    while(j<path.length-1&&cum[j]<target)j++;
+    const A=path[j-1],B=path[j],f=(target-cum[j-1])/((cum[j]-cum[j-1])||1);
+    out.push({lat:A.lat+(B.lat-A.lat)*f+(rng()-0.5)*0.00004,lng:A.lng+(B.lng-A.lng)*f+(rng()-0.5)*0.00004,t:t0+(t1-t0)*s/n});
+  }
+  return out;
+}
+function buildDemo(cache){
   const spots={};
-  Object.entries(S).forEach(([k,[a,b,n]])=>{spots['s-'+k]={id:'s-'+k,lat:base.lat+a,lng:base.lng+b,name:n,fav:k==='home'||k==='park',pinned:false,song:'',url:'',public:false,private:k==='home',demo:true};});
-  const plans=[
-    [['home',7,8.1],['station',8.25,8.5],['cls',9,12],['pizza',12.15,13],['cls',13.15,16.4],['park',17,17.8],['friend',18.4,21.5],['home',22,23]],
-    [['home',7.2,8.2],['station',8.35,8.6],['cls',9,12],['cafe',12.2,13],['cls',13.2,16.5],['gym',17.3,19],['home',19.5,23]],
-    [['home',8,9.5],['station',9.7,10],['cls',10.3,12.5],['pizza',12.6,13.4],['cls',13.5,16],['home',16.6,23]]
-  ];
+  Object.entries(DEMO_SPOTS).forEach(([k,[a,b,n]])=>{
+    const c=cache&&cache.spots[k];
+    spots['s-'+k]={id:'s-'+k,lat:c?c.lat:DEMO_BASE.lat+a,lng:c?c.lng:DEMO_BASE.lng+b,name:n,fav:k==='home'||k==='park',pinned:false,song:'',url:'',public:false,private:k==='home',demo:true};
+  });
   const days={},rng=mulberry32(7);
-  plans.forEach((plan,di)=>{
+  DEMO_PLANS.forEach((plan,di)=>{
     const d0=new Date();d0.setHours(0,0,0,0);d0.setDate(d0.getDate()-di);
     const H=h=>d0.getTime()+h*3600000,points=[],visits=[];
     plan.forEach(([k,a,b],i)=>{
       const sp=spots['s-'+k];
       if(i>0){
-        const pv=spots['s-'+plan[i-1][0]],t0=H(plan[i-1][2]),t1=H(a);
-        const steps=Math.max(4,Math.round((t1-t0)/60000)),bend=(rng()-0.5)*0.0025;
-        for(let s=1;s<steps;s++){
-          const f=s/steps,off=Math.sin(f*Math.PI)*bend;
-          points.push({lat:pv.lat+(sp.lat-pv.lat)*f+off+(rng()-0.5)*0.00008,lng:pv.lng+(sp.lng-pv.lng)*f-off+(rng()-0.5)*0.00008,t:t0+(t1-t0)*f});
+        const pk=plan[i-1][0],pv=spots['s-'+pk],t0=H(plan[i-1][2]),t1=H(a),leg=cache&&cache.legs[pk+'>'+k];
+        if(leg&&leg.length>1){points.push(...alongPath(leg.map(([la,ln])=>({lat:la,lng:ln})),t0,t1,rng));}
+        else{
+          const steps=Math.max(4,Math.round((t1-t0)/60000)),bend=(rng()-0.5)*0.0025;
+          for(let s=1;s<steps;s++){
+            const f=s/steps,off=Math.sin(f*Math.PI)*bend;
+            points.push({lat:pv.lat+(sp.lat-pv.lat)*f+off+(rng()-0.5)*0.00008,lng:pv.lng+(sp.lng-pv.lng)*f-off+(rng()-0.5)*0.00008,t:t0+(t1-t0)*f});
+          }
         }
       }
-      for(let t=H(a);t<=H(b);t+=120000) points.push({lat:sp.lat+(rng()-0.5)*0.0002,lng:sp.lng+(rng()-0.5)*0.0002,t});
+      for(let t=H(a);t<=H(b);t+=120000) points.push({lat:sp.lat+(rng()-0.5)*0.00015,lng:sp.lng+(rng()-0.5)*0.00015,t});
       visits.push({id:'d'+di+'-'+i,spot:sp.id,start:H(a),end:H(b)});
     });
     days[dayKey(H(12))]={points,visits,tracks:null,demo:true};
   });
-  return {days,spots,lfm:{user:'',key:''},showCommunity:true,demo:true};
+  return {days,spots};
+}
+function demo(){const d=buildDemo(demoCache());return {days:d.days,spots:d.spots,lfm:{user:'',key:''},showCommunity:true,demo:true};}
+
+const ROUTERS=['https://routing.openstreetmap.de/routed-foot/','https://router.project-osrm.org/'];
+async function osrm(path){
+  for(const base of ROUTERS){
+    const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),8000);
+    try{
+      const r=await fetch(base+path,{signal:ctl.signal});clearTimeout(tm);
+      if(!r.ok)continue;
+      const j=await r.json();if(j.code==='Ok')return j;
+    }catch(e){clearTimeout(tm);}
+  }
+  return null;
+}
+let routingDemo=false;
+async function routeDemo(){
+  if(routingDemo||demoCache())return;
+  routingDemo=true;
+  try{
+    const snapped={};
+    for(const [k,[a,b]] of Object.entries(DEMO_SPOTS)){
+      const lat=DEMO_BASE.lat+a,lng=DEMO_BASE.lng+b;
+      const j=await osrm('nearest/v1/driving/'+lng.toFixed(6)+','+lat.toFixed(6));
+      if(!j||!j.waypoints||!j.waypoints[0])return;
+      const [ln,la]=j.waypoints[0].location;snapped[k]={lat:la,lng:ln};
+    }
+    const pairs=new Set();
+    DEMO_PLANS.forEach(plan=>plan.forEach((st,i)=>{if(i>0)pairs.add(plan[i-1][0]+'>'+st[0]);}));
+    const legs={};
+    for(const pr of pairs){
+      const [a,b]=pr.split('>'),A=snapped[a],B=snapped[b];
+      const j=await osrm('route/v1/driving/'+A.lng.toFixed(6)+','+A.lat.toFixed(6)+';'+B.lng.toFixed(6)+','+B.lat.toFixed(6)+'?overview=full&geometries=geojson');
+      if(!j||!j.routes||!j.routes[0])return;
+      legs[pr]=j.routes[0].geometry.coordinates.map(([ln,la])=>[Math.round(la*1e6)/1e6,Math.round(ln*1e6)/1e6]);
+    }
+    const cache={spots:snapped,legs};
+    try{localStorage.setItem(DEMO_CACHE,JSON.stringify(cache));}catch(e){}
+    applyDemo(cache);
+  }finally{routingDemo=false;}
+}
+function applyDemo(cache){
+  const d=buildDemo(cache);
+  if(data.demo){
+    Object.keys(data.spots).forEach(id=>{if(data.spots[id].demo)delete data.spots[id];});
+    Object.assign(data.spots,d.spots);data.days=d.days;save();
+  }
+  if(view&&view.sample){const k=view.dayKey;view.day=d.days[k]||view.day;view.spots=d.spots;}
+  if(replay.on)stopReplay();
+  fitFor=null;refresh();
 }
 
 let data=load()||demo();
@@ -790,8 +880,8 @@ function renderList(){
   if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement.closest('#list'))return;
   const day=D();
   el.innerHTML=view
-    ?'<div><h2>'+esc(view.author)+'\'s places</h2><p class="hint">Hit ▶ to hear each place. Songs open in a new tab.</p></div>'
-    :'<div><h2>Your places '+(day.demo?'<span class="badge">sample</span>':'')+'</h2><p class="hint">Rename a place, star it, add a song, hit ▶ to hear its melody.</p></div>';
+    ?'<div><h2>'+(view.sample?'Sample places':esc(view.author)+'\'s places')+'</h2><p class="hint">Hit ▶ to hear each place. Songs open in a new tab.</p></div>'
+    :'<div><h2>Your places '+(day.demo?'<span class="badge">sample</span>':'')+'</h2>'+(data.demo&&data.welcomeHidden?'<p class="hint"><a href="#" id="makeYours">Replace the sample with my own days</a></p>':'')+'<p class="hint">Rename a place, star it, add a song, hit ▶ to hear its melody.</p></div>';
   if(!day.visits.length){
     const e=document.createElement('div');e.className='empty';
     e.textContent=day.points.length?'No stop detected yet. A place shows up once you stay about 4 minutes in the same spot.':'No places on this day. You can still add spots on the map.';
@@ -854,7 +944,7 @@ function renderDays(){
 }
 function renderViewbar(){
   const vb=$('#viewbar');vb.classList.toggle('show',!!view);
-  if(view)$('#viewText').innerHTML='Viewing <b>'+esc(view.author)+'</b>\'s day · '+esc(dayLabel(view.dayKey))+'. Hit ▶ Replay to hear it.';
+  if(view)$('#viewText').innerHTML=view.sample?'Viewing a <b>sample</b> day. Your own days are untouched.':'Viewing <b>'+esc(view.author)+'</b>\'s day · '+esc(dayLabel(view.dayKey))+'. Hit ▶ Replay to hear it.';
   ['#btnMark','#btnPin','#btnLfm'].forEach(id=>{$(id).disabled=!!view;});
 }
 function legend(){
@@ -863,7 +953,7 @@ function legend(){
 }
 function refreshSoft(){renderList();renderSpots();drawMap();updateNow();}
 function refresh(){
-  buildSegs();renderDays();renderViewbar();renderShare();renderList();renderSpots();legend();drawMap();updateNow();
+  buildSegs();renderWelcome();renderDays();renderViewbar();renderShare();renderList();renderSpots();legend();drawMap();updateNow();
   $('#btnReplay').disabled=!replay.total;
   if(!replay.on){replay.u=0;$('#scrub').value=0;$('#clock').textContent=replay.total?fmt(timeAt(0)):'--:--';}
 }
@@ -909,12 +999,26 @@ function dropDemo(){
   if(!data.demo)return;
   Object.keys(data.spots).forEach(id=>{if(data.spots[id].demo)delete data.spots[id];});
   Object.keys(data.days).forEach(k=>{if(data.days[k].demo)delete data.days[k];});
-  data.demo=false;
+  data.demo=false;curDay=dayKey(Date.now());fitFor=null;
+  if(view&&view.sample)view=null;
+  save();
 }
+function renderWelcome(){$('#welcome').classList.toggle('show',!!data.demo&&!data.welcomeHidden&&!view);}
+$('#wRec').addEventListener('click',()=>{data.welcomeHidden=true;save();renderWelcome();startGPS();
+  note('Allow location access. The sample days disappear as soon as your first position arrives.');});
+$('#wBlank').addEventListener('click',()=>{
+  if(replay.on)stopReplay();stopAll();dropDemo();data.welcomeHidden=true;save();refresh();
+  note('Empty map. Hit "Record my day" or "Add a spot on the map" to start.');
+  if('geolocation' in navigator){try{navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],15),()=>{},{timeout:8000});}catch(e){}}
+});
+$('#wHide').addEventListener('click',()=>{data.welcomeHidden=true;save();refresh();});
+$('#list').addEventListener('click',e=>{if(e.target.id==='makeYours'){e.preventDefault();data.welcomeHidden=false;save();renderWelcome();window.scrollTo({top:0,behavior:'smooth'});}});
 let lastShareSync=0;
 function onPos(pos){
   const pt={lat:pos.coords.latitude,lng:pos.coords.longitude,t:Date.now()};
+  const wasDemo=data.demo;
   dropDemo();
+  if(wasDemo){data.welcomeHidden=true;if(view&&view.sample)view=null;map.setView([pt.lat,pt.lng],16);}
   const k=dayKey(pt.t);
   if(curDay!==k){curDay=k;if(!view)fitFor=null;}
   const day=myDay(k),last=day.points[day.points.length-1];
@@ -924,7 +1028,7 @@ function onPos(pos){
     if(day.shared&&pt.t-lastShareSync>60000){lastShareSync=pt.t;scheduleSync();}
     if(!view)refresh();
   }
-  note('Recording… keep this page open.');
+  note(wasDemo?'Your first day has started! The sample days are gone, this map is now yours. Keep this page open.':'Recording… keep this page open.');
 }
 function onErr(e){
   stopGPS();
@@ -950,11 +1054,12 @@ $('#btnMark').addEventListener('click',()=>{
 });
 $('#btnPin').addEventListener('click',()=>setPin(!pinMode));
 $('#btnDemo').addEventListener('click',()=>{
-  stopGPS();if(replay.on)stopReplay();stopAll();view=null;
-  const keep=Object.values(data.spots).filter(s=>!s.demo&&(s.pinned||s.public));
-  const lfm=data.lfm,show=data.showCommunity;
-  data=demo();data.lfm=lfm;data.showCommunity=show;keep.forEach(s=>{data.spots[s.id]=s;});
-  curDay=Object.keys(data.days).sort().pop();fitFor=null;save();refresh();note('');
+  if(replay.on)stopReplay();stopAll();setPin(false);
+  if(data.demo){view=null;curDay=Object.keys(data.days).sort().pop();fitFor=null;refresh();note('');return;}
+  const d=buildDemo(demoCache()),k=Object.keys(d.days).sort().pop();
+  view={author:'Sample',dayKey:k,mine:false,sample:true,day:d.days[k],spots:d.spots};
+  fitFor=null;refresh();routeDemo();
+  note('This is a sample day, shown on top of your own data. Hit "Back to my days" to return.');
 });
 let clearArmed=null;
 $('#btnClear').addEventListener('click',e=>{
@@ -978,6 +1083,7 @@ $('#scrub').addEventListener('input',e=>{
 
 refresh();
 initAuth();
+if(data.demo&&!demoCache())routeDemo();
 })();
 </script>
 </body>
