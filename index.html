@@ -7,11 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script>window.L || document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"><\/script>');</script>
+<link rel="stylesheet" href="leaflet.css">
+<script src="leaflet.js"></script>
+<script src="supabase.js"></script>
+<script src="config.js"></script>
 <style>
-/* Plan: purple night, real dark map in the middle, places + music on the right, replay bar below. Single dark theme on purpose. */
+/* Plan: purple night, real map in the middle, places + music + community on the right, replay bar below. Single dark theme on purpose. */
 :root{
   --bg:#120b1f;
   --surface:#1c1330;
@@ -41,31 +42,37 @@ button.rec,button.on{background:var(--accent-2);border-color:var(--accent-2);col
 button:disabled{opacity:.45;cursor:not-allowed}
 .note{display:none;background:#2a1640;border:1px solid var(--accent);border-radius:12px;padding:10px 14px}
 .note.show{display:block}
+.viewbar{display:none;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(90deg,#3a1650,#2a1640);border:1px solid var(--accent-2);border-radius:12px;padding:10px 14px}
+.viewbar.show{display:flex}
+.viewbar b{font-family:var(--display)}
 .badge{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#1a0b2e;background:var(--accent-2);border-radius:999px;padding:2px 9px;vertical-align:middle}
-.freq{display:inline-block;font-size:12px;font-weight:700;color:var(--accent-2);border:1px solid var(--accent-2);border-radius:999px;padding:0 8px}
-.main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
-@media (max-width:880px){.main{grid-template-columns:1fr}}
+.freq,.tag{display:inline-block;font-size:12px;font-weight:700;color:var(--accent-2);border:1px solid var(--accent-2);border-radius:999px;padding:0 8px;white-space:nowrap}
+.tag.pub{color:#8fe3ff;border-color:#8fe3ff}
+.tag.priv{color:#ffd36e;border-color:#ffd36e}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:18px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:1fr}}
 .mapcard{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column}
 .daybar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
 .daybar label{color:var(--muted);font-size:13px}
 .daybar select{padding:5px 12px;border-radius:10px}
+.daybar .share{display:inline-flex;align-items:center;gap:6px;color:var(--text)}
 .daybar .legend{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
 .mapwrap{position:relative;height:460px}
 @media (max-width:600px){.mapwrap{height:340px}}
 #map{width:100%;height:100%;background:#160e27}
-.leaflet-tile-pane{filter:invert(1) hue-rotate(200deg) brightness(.8) saturate(.7);}
+.leaflet-tile-pane{filter:invert(1) hue-rotate(200deg) brightness(.8) saturate(.7)}
 .pinmode #map{cursor:crosshair}
 .leaflet-container{font-family:var(--body)}
 .leaflet-control-attribution{background:rgba(18,11,31,.75)!important;color:var(--muted)!important}
 .leaflet-control-attribution a{color:var(--accent)!important}
 .leaflet-bar a{background:var(--surface)!important;color:var(--text)!important;border-color:var(--line)!important}
 .tip{background:rgba(18,11,31,.85);border:0;border-radius:6px;color:var(--text);font-weight:600;font-size:12.5px;box-shadow:none;padding:2px 7px}
-.tip.leaflet-tooltip-right:before{display:none}
+.tip.leaflet-tooltip-right:before,.tip.leaflet-tooltip-top:before{display:none}
 .now{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 16px;border-top:1px solid var(--line)}
 .now .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .now .name{font-family:var(--display);font-weight:700;font-size:20px}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);background:#2a1d44;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-variant-numeric:tabular-nums}
-.now a,.place a,.lfm a{color:var(--accent-2)}
+a{color:var(--accent-2)}
 #nowSong{font-size:14px}
 .replay{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--line)}
 .replay input{flex:1;accent-color:var(--accent-2)}
@@ -73,33 +80,43 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .side{display:flex;flex-direction:column;gap:14px}
 .list{display:flex;flex-direction:column;gap:10px;max-height:620px;overflow-y:auto;padding-right:2px}
 h2{font-family:var(--display);font-size:18px;margin:0}
+h3{font-size:14px;margin:6px 0 0;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .hint{color:var(--muted);font-size:13px;margin:0}
-.place{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
-.place.playing,.spotrow.playing{box-shadow:0 0 0 1px var(--c),0 0 22px -6px var(--c)}
+.place,.spotcard{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.spotcard{padding:8px 10px 8px 12px;border-radius:12px}
+.place.playing,.spotcard.playing{box-shadow:0 0 0 1px var(--c),0 0 22px -6px var(--c)}
 .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.place input[type=text],.place input[type=url],.lfm input{font:inherit;color:var(--text);background:transparent;border:1px solid transparent;border-radius:8px;padding:3px 6px;width:100%;min-width:0}
-.place .row:first-child{flex-wrap:nowrap}
-.place input.pname{font-weight:700;font-size:16px}
-.place input:hover,.lfm input{border-color:var(--line)}
-.place input:focus,.lfm input:focus{border-color:var(--accent);outline:none;background:#150d26}
+.row.top{flex-wrap:nowrap}
+.side input[type=text],.side input[type=url],.side input[type=email],.side input[type=password]{font:inherit;color:var(--text);background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;width:100%;min-width:0}
+.side input.pname{font-weight:700;font-size:16px;border-color:transparent;padding:3px 6px}
+.side input.pname:hover{border-color:var(--line)}
+.side input:focus{border-color:var(--accent);outline:none;background:#150d26}
+.pname-ro{font-weight:700;font-size:16px;flex:1;min-width:0}
 .time{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
-.place button,.spotrow button{padding:5px 11px;font-size:13px;flex-shrink:0}
+.place button,.spotcard button,.daylist button{padding:5px 11px;font-size:13px;flex-shrink:0}
 button.star{padding:4px 9px;color:var(--muted)}
 button.star[aria-pressed="true"]{color:#ffd36e;border-color:#ffd36e}
-.heard{font-size:13px;color:var(--text);background:#160e27;border-radius:10px;padding:6px 9px}
+.heard{font-size:13px;background:#160e27;border-radius:10px;padding:6px 9px}
 .heard b{color:var(--muted);font-weight:500}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
-details .fields{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+details .fields{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.check{display:flex;align-items:flex-start;gap:7px;font-size:13px;color:var(--text);cursor:pointer}
+.check input{margin-top:3px;accent-color:var(--accent-2)}
+.check small{color:var(--muted);display:block}
 .empty{color:var(--muted);border:1px dashed var(--line);border-radius:14px;padding:14px}
 .spots{display:flex;flex-direction:column;gap:6px}
-.spotrow{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:6px 8px 6px 12px}
-.spotrow .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex-shrink:0}
-.spotrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-.spotrow .ct{color:var(--muted);font-size:12px;white-space:nowrap}
-.lfm{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
-.lfm summary{font-family:var(--display);font-weight:700;font-size:16px;color:var(--text)}
-.lfm .fields{gap:8px}
-.lfm label{font-size:12.5px;color:var(--muted)}
+.spotcard .dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex-shrink:0}
+.spotcard .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;cursor:pointer}
+.spotcard .ct{color:var(--muted);font-size:12px;white-space:nowrap}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+.panel > summary{font-family:var(--display);font-weight:700;font-size:16px;color:var(--text)}
+.panel label{font-size:12.5px;color:var(--muted)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.daylist{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.daylist .d{display:flex;align-items:center;gap:8px;background:#160e27;border-radius:10px;padding:6px 8px 6px 10px}
+.daylist .d span{flex:1;min-width:0;font-size:13.5px}
+.daylist .d small{color:var(--muted)}
+.status{font-size:12px;color:var(--muted)}
 footer{color:var(--muted);font-size:13px;max-width:75ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -109,7 +126,7 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
   <header>
     <div>
       <h1>Soundtrack <span>of your life</span></h1>
-      <p class="sub">Every place you stop at gets its own melody. Same place, same motif, and the time of day changes its colour. At the end of the day, you replay it as music.</p>
+      <p class="sub">Every place you stop at gets its own melody. Same place, same motif, and the time of day changes its colour. Pin places with a song, share them, and replay your day as music.</p>
     </div>
     <div class="controls">
       <button id="btnRec" class="primary" type="button">Record my day</button>
@@ -121,12 +138,17 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
   </header>
 
   <div id="note" class="note" role="status"></div>
+  <div id="viewbar" class="viewbar" role="status">
+    <span id="viewText"></span>
+    <button id="btnBack" type="button">← Back to my days</button>
+  </div>
 
   <div class="main">
     <section class="mapcard" aria-label="Map of the day">
       <div class="daybar">
         <label for="daySel">Day</label>
         <select id="daySel"></select>
+        <label class="share" title="Log in to share a day"><input type="checkbox" id="shareDay"> Share this day</label>
         <span class="legend" id="legend"></span>
       </div>
       <div class="mapwrap" id="mapwrap"><div id="map"></div></div>
@@ -147,8 +169,14 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
 
     <div class="side">
       <aside class="list" id="list" aria-label="Places of the day"></aside>
-      <section id="spots" aria-label="Favourite and frequent spots"></section>
-      <details class="lfm" id="lfm">
+      <section id="spots" aria-label="Your spots"></section>
+
+      <details class="panel" id="community" open>
+        <summary>Community</summary>
+        <div class="fields" id="comBody"></div>
+      </details>
+
+      <details class="panel" id="lfm">
         <summary>Connect your music (Last.fm)</summary>
         <div class="fields">
           <p class="hint">Link Spotify, Apple Music or YouTube Music to a free <a href="https://www.last.fm" target="_blank" rel="noopener">Last.fm</a> account, then create a free API key at <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api/account/create</a>. Each place will show what you really listened to there.</p>
@@ -162,19 +190,18 @@ footer{color:var(--muted);font-size:13px;max-width:75ch}
     </div>
   </div>
 
-  <footer>Your location and settings stay in your browser. Keep the page open while recording: mobile browsers stop the GPS when the screen locks. Map © OpenStreetMap contributors © CARTO.</footer>
+  <footer>Your days stay in your browser. Only what you tick as public or shared is sent, and points near your private places are removed first. Keep the page open while recording: mobile browsers stop the GPS when the screen locks. Map © OpenStreetMap contributors.</footer>
 </div>
 
 <script>
 (() => {
 const $ = s => document.querySelector(s);
-if(!window.L){
-  $('#note').textContent='The map library could not load. Your network or an ad blocker may be blocking cdnjs.cloudflare.com and cdn.jsdelivr.net. Try another network, then reload.';
-  $('#note').classList.add('show');
-  return;
-}
-const STORE = 'sdtv-en-v2';
-const PALETTE = ['#b56cff','#ff4fb8','#8a7dff','#e08cff','#ff7ad1','#7a63ff','#d2a8ff','#ff9be0'];
+function note(msg){const n=$('#note');n.textContent=msg;n.classList.toggle('show',!!msg);}
+if(!window.L){note('The map library (leaflet.js) could not load. Check that leaflet.js and leaflet.css sit next to index.html.');return;}
+
+const STORE='sdtv-en-v2';
+const PALETTE=['#b56cff','#ff4fb8','#8a7dff','#e08cff','#ff7ad1','#7a63ff','#d2a8ff','#ff9be0'];
+const PRIVACY_RADIUS=250;
 
 /* ---------- utils ---------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -184,10 +211,10 @@ function colorFor(id){return PALETTE[hashStr(id)%PALETTE.length];}
 function fmt(t){return new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function dur(ms){const m=Math.round(ms/60000);return m<60?m+' min':Math.floor(m/60)+'h'+(m%60?' '+String(m%60).padStart(2,'0')+'m':'');}
 function dayKey(t){const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-function dayLabel(k){const [y,m,d]=k.split('-').map(Number);const dt=new Date(y,m-1,d);const today=dayKey(Date.now());return (k===today?'Today · ':'')+dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}
+function dayLabel(k){const [y,m,d]=k.split('-').map(Number);const dt=new Date(y,m-1,d);return (k===dayKey(Date.now())?'Today · ':'')+dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}
 function mix(a,b,f){const p=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));const A=p(a),B=p(b);return 'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*f)).join(',')+')';}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function note(msg){const n=$('#note');n.textContent=msg;n.classList.toggle('show',!!msg);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const round5=x=>Math.round(x*1e4)/1e4;
 
 /* ---------- music ---------- */
 const MODES={
@@ -305,8 +332,9 @@ const Engine={
 };
 
 /* ---------- data ----------
-   data = { days: { 'YYYY-MM-DD': { points:[{lat,lng,t}], visits:[{id,spot,start,end}], tracks:[...]|null } },
-            spots: { id: {id,lat,lng,name,fav,pinned,song,url} }, lfm:{user,key}, demo:bool } */
+   data = { days:{ 'YYYY-MM-DD':{points:[{lat,lng,t}], visits:[{id,spot,start,end}], tracks, shared, demo} },
+            spots:{ id:{id,lat,lng,name,fav,pinned,song,url,public,private,demo} },
+            lfm:{user,key}, showCommunity, demo } */
 function save(){try{localStorage.setItem(STORE,JSON.stringify(data));}catch(e){}}
 function load(){try{const d=JSON.parse(localStorage.getItem(STORE));return d&&d.days&&d.spots?d:null;}catch(e){return null;}}
 
@@ -315,7 +343,7 @@ function demo(){
   const S={home:[0,0,'Home'],station:[0.0040,0.0055,'Station'],cls:[0.0105,0.0150,'Class'],pizza:[0.0092,0.0178,'Corner pizzeria'],
            park:[0.0030,-0.0048,'Park'],friend:[-0.0038,0.0062,"At a friend's"],gym:[-0.0050,-0.0030,'Gym'],cafe:[0.0068,0.0102,'Café']};
   const spots={};
-  Object.entries(S).forEach(([k,[a,b,n]])=>{spots['s-'+k]={id:'s-'+k,lat:base.lat+a,lng:base.lng+b,name:n,fav:k==='home'||k==='park',pinned:false,song:'',url:''};});
+  Object.entries(S).forEach(([k,[a,b,n]])=>{spots['s-'+k]={id:'s-'+k,lat:base.lat+a,lng:base.lng+b,name:n,fav:k==='home'||k==='park',pinned:false,song:'',url:'',public:false,private:k==='home',demo:true};});
   const plans=[
     [['home',7,8.1],['station',8.25,8.5],['cls',9,12],['pizza',12.15,13],['cls',13.15,16.4],['park',17,17.8],['friend',18.4,21.5],['home',22,23]],
     [['home',7.2,8.2],['station',8.35,8.6],['cls',9,12],['cafe',12.2,13],['cls',13.2,16.5],['gym',17.3,19],['home',19.5,23]],
@@ -338,23 +366,33 @@ function demo(){
       for(let t=H(a);t<=H(b);t+=120000) points.push({lat:sp.lat+(rng()-0.5)*0.0002,lng:sp.lng+(rng()-0.5)*0.0002,t});
       visits.push({id:'d'+di+'-'+i,spot:sp.id,start:H(a),end:H(b)});
     });
-    days[dayKey(H(12))]={points,visits,tracks:null};
+    days[dayKey(H(12))]={points,visits,tracks:null,demo:true};
   });
-  return {days,spots,lfm:{user:'',key:''},demo:true};
+  return {days,spots,lfm:{user:'',key:''},showCommunity:true,demo:true};
 }
 
 let data=load()||demo();
+if(data.demo){
+  Object.values(data.spots).forEach(s=>{if(s.id.startsWith('s-'))s.demo=true;});
+  Object.values(data.days).forEach(d=>{d.demo=true;});
+}
+if(data.showCommunity===undefined)data.showCommunity=true;
 let curDay=Object.keys(data.days).sort().pop()||dayKey(Date.now());
-function D(){return data.days[curDay]||(data.days[curDay]={points:[],visits:[],tracks:null});}
+let view=null; // someone's shared day: {author, dayKey, mine, day, spots}
+
+function myDay(k){return data.days[k]||(data.days[k]={points:[],visits:[],tracks:null});}
+function D(){return view?view.day:myDay(curDay);}
+function SP(id){return view?view.spots[id]:data.spots[id];}
+function allSpots(){return Object.values(view?view.spots:data.spots);}
 
 function nearestSpot(lat,lng,max){let best=null,bd=max||100;Object.values(data.spots).forEach(s=>{const d=dist(s,{lat,lng});if(d<bd){bd=d;best=s;}});return best;}
 function newSpot(lat,lng,extra){
   const id='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const n=Object.keys(data.spots).length+1;
-  return data.spots[id]=Object.assign({id,lat,lng,name:'Place '+n,fav:false,pinned:false,song:'',url:''},extra||{});
+  return data.spots[id]=Object.assign({id,lat,lng,name:'Place '+n,fav:false,pinned:false,song:'',url:'',public:false,private:false},extra||{});
 }
-function daysVisited(id){return Object.values(data.days).filter(d=>d.visits.some(v=>v.spot===id)).length;}
-const isFrequent=s=>daysVisited(s.id)>=3;
+function daysVisited(id){if(view)return 0;return Object.values(data.days).filter(d=>d.visits.some(v=>v.spot===id)).length;}
+const isFrequent=s=>!view&&daysVisited(s.id)>=3;
 
 function detectStays(points){
   const stays=[];let i=0;
@@ -379,10 +417,141 @@ function updateVisits(day){
 const themeFor=v=>makeTheme(v.spot,new Date(v.start).getHours());
 const heardAt=(a,b)=>(D().tracks||[]).filter(t=>t.uts>=a&&t.uts<=b);
 
+/* ---------- community (Supabase) ---------- */
+const CFG=window.SDTV_CONFIG||{};
+let sb=null;
+try{if(CFG.supabaseUrl&&CFG.supabaseKey&&window.supabase)sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey);}catch(e){sb=null;}
+let session=null,community=[],pubDays=[],syncTimer=null,lastSync='';
+const uid=()=>session&&session.user&&session.user.id;
+function myName(){
+  if(!session)return '';
+  const m=session.user.user_metadata||{};
+  return (m.name||(session.user.email||'').split('@')[0]||'someone').slice(0,40);
+}
+function publicDayPayload(day){
+  const priv=Object.values(data.spots).filter(s=>s.private);
+  const near=p=>priv.some(s=>dist(s,p)<PRIVACY_RADIUS);
+  const points=day.points.filter(p=>!near(p)).map(p=>({lat:round5(p.lat),lng:round5(p.lng),t:p.t}));
+  const visits=day.visits.filter(v=>{const s=data.spots[v.spot];return s&&!s.private&&!near(s);});
+  const spots={};
+  visits.forEach(v=>{const s=data.spots[v.spot];spots[s.id]={id:s.id,name:s.name,lat:round5(s.lat),lng:round5(s.lng),song:s.song||'',url:s.url||''};});
+  return {points,visits:visits.map(v=>({id:v.id,spot:v.spot,start:v.start,end:v.end})),spots};
+}
+function scheduleSync(){if(!sb||!uid())return;clearTimeout(syncTimer);syncTimer=setTimeout(pushAll,1500);}
+async function pushAll(){
+  if(!sb||!uid())return;
+  const now=new Date().toISOString();
+  const spots=Object.values(data.spots).filter(s=>s.public&&!s.demo).map(s=>({user_id:uid(),id:s.id,author:myName(),name:(s.name||'Spot').slice(0,80),lat:round5(s.lat),lng:round5(s.lng),song:(s.song||'').slice(0,200),url:(s.url||'').slice(0,500),is_public:true,updated_at:now}));
+  const days=Object.entries(data.days).filter(([k,d])=>d.shared&&!d.demo).map(([k,d])=>({user_id:uid(),day:k,author:myName(),data:publicDayPayload(d),is_public:true,updated_at:now}));
+  try{
+    if(spots.length){const {error}=await sb.from('spots').upsert(spots,{onConflict:'user_id,id'});if(error)throw error;}
+    if(days.length){const {error}=await sb.from('days').upsert(days,{onConflict:'user_id,day'});if(error)throw error;}
+    lastSync=fmt(Date.now());renderCommunity();
+  }catch(e){note('Sharing failed: '+(e.message||e)+'. Check config.js and the SQL from SETUP.md.');}
+}
+async function unpublishSpot(s){
+  if(!sb||!uid())return;
+  const {error}=await sb.from('spots').delete().eq('user_id',uid()).eq('id',s.id);
+  if(error)note('Could not remove the spot from the community: '+error.message);
+}
+async function unpublishDay(k){
+  if(!sb||!uid())return;
+  const {error}=await sb.from('days').delete().eq('user_id',uid()).eq('day',k);
+  if(error)note('Could not unshare the day: '+error.message);else loadCommunity();
+}
+async function loadCommunity(){
+  if(!sb)return;
+  const [s,d]=await Promise.all([
+    sb.from('spots').select('user_id,id,author,name,lat,lng,song,url').eq('is_public',true).order('updated_at',{ascending:false}).limit(300),
+    sb.from('days').select('user_id,day,author').eq('is_public',true).order('day',{ascending:false}).limit(30)
+  ]);
+  if(s.error||d.error){note('Community: '+(s.error||d.error).message+'. Did you run the SQL from SETUP.md?');return;}
+  community=s.data.filter(r=>r.user_id!==uid());
+  pubDays=d.data;
+  renderCommunity();if(!view)drawMap();
+}
+async function viewDay(row){
+  const {data:r,error}=await sb.from('days').select('user_id,day,author,data').eq('user_id',row.user_id).eq('day',row.day).single();
+  if(error){note('Could not open this day: '+error.message);return;}
+  if(replay.on)stopReplay();stopAll();setPin(false);
+  const pl=r.data||{};
+  view={author:r.author||'someone',dayKey:r.day,mine:r.user_id===uid(),day:{points:pl.points||[],visits:pl.visits||[],tracks:null},spots:pl.spots||{}};
+  fitFor=null;refresh();window.scrollTo({top:0,behavior:'smooth'});
+}
+function exitView(){if(replay.on)stopReplay();stopAll();view=null;fitFor=null;refresh();}
+async function initAuth(){
+  if(!sb){renderCommunity();return;}
+  try{const r=await sb.auth.getSession();session=r.data.session;}catch(e){}
+  sb.auth.onAuthStateChange((_ev,s)=>{session=s;renderCommunity();renderShare();renderSpots();if(s)scheduleSync();});
+  renderCommunity();loadCommunity();
+}
+function renderCommunity(){
+  const el=$('#comBody');
+  if(!sb){
+    el.innerHTML='<p class="hint">Community features are off. To let people log in, share spots with songs and public days, create a free Supabase project and fill in <b>config.js</b> (steps in SETUP.md).</p>';
+    return;
+  }
+  let h='';
+  if(uid()){
+    h+='<div class="row"><span>Signed in as <b>'+esc(myName())+'</b></span><button id="btnOut" type="button">Log out</button></div>'
+      +'<p class="status">'+(lastSync?'Last shared at '+lastSync:'Tick 🌍 on a spot or "Share this day" to publish.')+'</p>';
+  }else{
+    h+='<p class="hint">Log in to share spots with songs and your days. Anyone can browse what is public.</p>'
+      +'<label for="auName">Display name (for sign up)</label><input id="auName" type="text" maxlength="40" autocomplete="nickname">'
+      +'<label for="auMail">Email</label><input id="auMail" type="email" autocomplete="email">'
+      +'<label for="auPass">Password (6+ characters)</label><input id="auPass" type="password" autocomplete="current-password">'
+      +'<div class="btnrow"><button id="btnIn" class="primary" type="button">Log in</button><button id="btnUp" type="button">Sign up</button></div>';
+  }
+  h+='<label class="check"><input type="checkbox" id="showCom"'+(data.showCommunity?' checked':'')+'> <span>Show community spots on the map <small>'+community.length+' public spot'+(community.length!==1?'s':'')+' from others</small></span></label>';
+  h+='<h3>Public days</h3><div class="daylist">';
+  if(!pubDays.length)h+='<p class="hint">No public days yet.</p>';
+  pubDays.forEach((d,i)=>{h+='<div class="d"><span>'+esc(d.author||'someone')+(d.user_id===uid()?' (you)':'')+' <small>· '+esc(dayLabel(d.day))+'</small></span><button type="button" data-view="'+i+'">View</button></div>';});
+  h+='</div><button id="btnRefresh" type="button">Refresh</button>';
+  el.innerHTML=h;
+  const on=(id,ev,fn)=>{const x=el.querySelector('#'+id);if(x)x.addEventListener(ev,fn);};
+  on('btnOut','click',async()=>{await sb.auth.signOut();note('Logged out. Your local days are still here.');});
+  on('btnIn','click',async()=>{
+    const email=$('#auMail').value.trim(),password=$('#auPass').value;
+    if(!email||!password){note('Enter your email and password.');return;}
+    const {error}=await sb.auth.signInWithPassword({email,password});
+    note(error?'Log in failed: '+error.message:'Welcome back!');
+    if(!error)loadCommunity();
+  });
+  on('btnUp','click',async()=>{
+    const name=$('#auName').value.trim(),email=$('#auMail').value.trim(),password=$('#auPass').value;
+    if(!name||!email||password.length<6){note('For sign up, fill in a display name, your email and a password of 6+ characters.');return;}
+    const {data:r,error}=await sb.auth.signUp({email,password,options:{data:{name},emailRedirectTo:location.origin+location.pathname}});
+    if(error){note('Sign up failed: '+error.message);return;}
+    note(r.session?'Account created, you are logged in.':'Account created. Confirm your email with the link we sent, then log in.');
+  });
+  on('showCom','change',e=>{data.showCommunity=e.target.checked;save();drawMap();});
+  on('btnRefresh','click',loadCommunity);
+  el.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>viewDay(pubDays[+b.dataset.view])));
+}
+let shareArmed=false;
+function renderShare(){
+  const box=$('#shareDay'),day=D();
+  const why=!sb?'Set up the community in config.js to share days':!uid()?'Log in to share a day':view?'You are viewing someone else\'s day':day.demo?'Sample days cannot be shared':!day.points.length?'Nothing recorded on this day':'';
+  box.disabled=!!why;box.checked=!view&&!!day.shared;
+  box.parentElement.title=why||'Publish this day (points near your private places are removed)';
+}
+$('#shareDay').addEventListener('change',e=>{
+  const day=D(),k=curDay;
+  if(e.target.checked){
+    if(!Object.values(data.spots).some(s=>s.private)&&!shareArmed){
+      e.target.checked=false;shareArmed=true;setTimeout(()=>{shareArmed=false;},10000);
+      note('No private place yet, so your home could be visible. Open a place and tick 🔒 "Private place", or tick "Share this day" again within 10 s to share anyway.');
+      return;
+    }
+    day.shared=true;save();pushAll().then(loadCommunity);
+    note('Day shared. Points within '+PRIVACY_RADIUS+' m of your private places are left out.');
+  }else{day.shared=false;save();unpublishDay(k);note('Day unshared.');}
+});
+
 /* ---------- playback ---------- */
-let nowId=null;
+let nowId=null,nowCS=null;
 function playVisit(v){Engine.play(themeFor(v));nowId=v.id;updateNow();}
-function playRoute(t){Engine.play(routeTheme(new Date(t).getHours()));nowId='route';replay.routeT=t;updateNow();}
+function playRoute(t){Engine.play(routeTheme(new Date(t).getHours()));nowId='route';updateNow();}
 function stopAll(){Engine.stop();nowId=null;updateNow();}
 function togglePlace(v){if(replay.on)stopReplay();if(nowId===v.id&&Engine.playing)stopAll();else playVisit(v);}
 function toggleSpot(s){
@@ -391,14 +560,22 @@ function toggleSpot(s){
   if(nowId===id&&Engine.playing){stopAll();return;}
   Engine.play(makeTheme(s.id,new Date().getHours()));nowId=id;updateNow();
 }
-function activeSpotId(){
+function csKey(c){return 'cs:'+c.user_id+':'+c.id;}
+function toggleCommunity(c){
+  if(replay.on)stopReplay();
+  const id=csKey(c);
+  if(nowId===id&&Engine.playing){stopAll();return;}
+  nowCS=c;Engine.play(makeTheme(c.id,new Date().getHours()));nowId=id;updateNow();
+}
+function activeMarkerId(){
   if(!nowId||!Engine.playing)return null;
   if(nowId.startsWith('spot:'))return nowId.slice(5);
+  if(nowId.startsWith('cs:'))return nowId;
   const v=D().visits.find(x=>x.id===nowId);return v?v.spot:null;
 }
 function songHTML(s){
   if(!s)return '';
-  if(s.url&&/^https?:\/\//.test(s.url))return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener">♪ '+esc(s.song||'Your song')+'</a>';
+  if(s.url&&/^https?:\/\//.test(s.url))return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener">♪ '+esc(s.song||'Listen to the song')+'</a>';
   return s.song?'♪ '+esc(s.song):'';
 }
 function heardHTML(list,max){
@@ -407,26 +584,27 @@ function heardHTML(list,max){
   return '<b>Heard here:</b> '+shown+(list.length>max?' +'+(list.length-max)+' more':'');
 }
 function updateNow(){
-  const chip=$('#nowChip'),song=$('#nowSong'),day=D();
+  const chip=$('#nowChip'),song=$('#nowSong'),name=$('#nowName');
   song.innerHTML='';
   const th=Engine.pending||Engine.theme;
-  if(nowId==='route'){
-    $('#nowName').textContent='On the move';chip.hidden=!th;if(th)chip.textContent=th.mode+' · '+th.bpm+' BPM';
+  const setChip=(t,withHour)=>{chip.hidden=!t;if(t)chip.textContent=t.mode+' · '+t.bpm+' BPM'+(withHour?' · '+moment(t.hour):'');};
+  if(nowId==='route'){name.textContent='On the move';setChip(th,false);}
+  else if(nowId&&nowId.startsWith('cs:')&&nowCS){
+    name.textContent=nowCS.name;setChip(th,true);
+    song.innerHTML='<span class="chip">by '+esc(nowCS.author||'someone')+'</span> '+songHTML(nowCS);
   }else if(nowId&&nowId.startsWith('spot:')){
-    const s=data.spots[nowId.slice(5)];
-    $('#nowName').textContent=s?s.name:'Spot';chip.hidden=!th;if(th)chip.textContent=th.mode+' · '+th.bpm+' BPM · '+moment(th.hour);
-    song.innerHTML=songHTML(s);
+    const s=SP(nowId.slice(5));name.textContent=s?s.name:'Spot';setChip(th,true);song.innerHTML=songHTML(s);
   }else{
-    const v=day.visits.find(x=>x.id===nowId);
+    const v=D().visits.find(x=>x.id===nowId);
     if(v){
-      const s=data.spots[v.spot],t=themeFor(v);
-      $('#nowName').textContent=s?s.name:'Place';chip.hidden=false;chip.textContent=t.mode+' · '+t.bpm+' BPM · '+moment(t.hour);
+      const s=SP(v.spot),t=themeFor(v);
+      name.textContent=s?s.name:'Place';setChip(t,true);
       song.innerHTML=[songHTML(s),heardHTML(heardAt(v.start,v.end),2)].filter(Boolean).join(' &nbsp; ');
-    }else{$('#nowName').textContent='Nothing yet';chip.hidden=true;}
+    }else{name.textContent='Nothing yet';chip.hidden=true;}
   }
   document.querySelectorAll('[data-play]').forEach(el=>{
     const on=el.dataset.play===nowId&&Engine.playing;
-    const card=el.closest('.place,.spotrow');if(card)card.classList.toggle('playing',on);
+    const card=el.closest('.place,.spotcard');if(card)card.classList.toggle('playing',on);
     el.textContent=on?'■ Stop':'▶ Listen';
   });
 }
@@ -479,10 +657,11 @@ function stopReplay(){replay.on=false;$('#btnReplay').textContent='▶ Replay th
 /* ---------- map ---------- */
 const map=L.map('map',{zoomControl:true}).setView([46.7245,6.532],14);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  maxZoom:19,referrerPolicy:'strict-origin-when-cross-origin',
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 const layer=L.layerGroup().addTo(map);
-let trail=[],markers={},head=null,fitFor=null,lastT=undefined;
+let trail=[],markers={},head=null,fitFor=null,lastT;
 new ResizeObserver(()=>map.invalidateSize()).observe($('#mapwrap'));
 
 function drawMap(){
@@ -496,23 +675,35 @@ function drawMap(){
       pl._tEnd=chunk[chunk.length-1].t;trail.push(pl);
     }
   }
+  if(!view&&data.showCommunity){
+    community.forEach(c=>{
+      const k=csKey(c);
+      const m=L.circleMarker([c.lat,c.lng],{radius:7,color:'#8fe3ff',weight:2,dashArray:'3 3',fillColor:colorFor(c.id),fillOpacity:.35,bubblingMouseEvents:false}).addTo(layer);
+      m._r=7;m._c='#8fe3ff';
+      m.bindTooltip(esc(c.name)+' · by '+esc(c.author||'someone')+(c.song?' · ♪':''),{direction:'top',className:'tip'});
+      m.on('click',()=>toggleCommunity(c));
+      markers[k]=m;
+    });
+  }
   const visited=new Set(day.visits.map(v=>v.spot));
-  Object.values(data.spots).forEach(s=>{
-    const here=visited.has(s.id);if(!here&&!s.fav&&!s.pinned)return;
+  allSpots().forEach(s=>{
+    const here=visited.has(s.id);if(!here&&!s.fav&&!s.pinned&&!s.public)return;
     const total=day.visits.filter(v=>v.spot===s.id).reduce((a,v)=>a+v.end-v.start,0);
     const r=here?8+Math.min(8,Math.log2(1+total/600000)*2.5):6;
-    const m=L.circleMarker([s.lat,s.lng],{radius:r,color:'#120b1f',weight:2,fillColor:colorFor(s.id),fillOpacity:here?1:.5,bubblingMouseEvents:false}).addTo(layer);
-    m._r=r;
-    m.bindTooltip((s.fav?'★ ':'')+esc(s.name)+(isFrequent(s)?' · frequent':''),{permanent:true,direction:'right',offset:[r,0],className:'tip'});
+    const m=L.circleMarker([s.lat,s.lng],{radius:r,color:'#120b1f',weight:2,fillColor:colorFor(s.id),fillOpacity:here?1:.55,bubblingMouseEvents:false}).addTo(layer);
+    m._r=r;m._c='#120b1f';
+    const label=(s.private?'🔒 ':s.public?'🌍 ':s.fav?'★ ':'')+esc(s.name)+(isFrequent(s)?' · frequent':'')+(s.song?' · ♪':'');
+    m.bindTooltip(label,{permanent:true,direction:'right',offset:[r,0],className:'tip'});
     m.on('click',()=>{const v=[...day.visits].reverse().find(x=>x.spot===s.id);if(v)togglePlace(v);else toggleSpot(s);});
     markers[s.id]=m;
   });
   head=L.circleMarker([0,0],{radius:6,color:'#ff4fb8',weight:3,fillColor:'#fff',fillOpacity:1,interactive:false});
-  if(fitFor!==curDay){
-    fitFor=curDay;
-    const ll=pts.map(p=>[p.lat,p.lng]).concat([...visited].map(id=>[data.spots[id].lat,data.spots[id].lng]));
+  const fitKey=view?'view:'+view.author+view.dayKey:curDay;
+  if(fitFor!==fitKey){
+    fitFor=fitKey;
+    const ll=pts.map(p=>[p.lat,p.lng]).concat([...visited].filter(SP).map(id=>[SP(id).lat,SP(id).lng]));
     if(ll.length)map.fitBounds(ll,{padding:[40,40],maxZoom:16});
-    else{const any=Object.values(data.spots)[0];if(any)map.setView([any.lat,any.lng],15);}
+    else{const any=allSpots()[0]||community[0];if(any)map.setView([any.lat,any.lng],15);}
   }
 }
 function posAt(T){
@@ -530,12 +721,12 @@ function animate(now){
     if(T!==null){const p=posAt(T);if(p){head.setLatLng([p.lat,p.lng]);if(!layer.hasLayer(head))head.addTo(layer);}}
     else if(head&&layer.hasLayer(head))layer.removeLayer(head);
   }
-  const sid=activeSpotId();
+  const act=activeMarkerId();
   Object.entries(markers).forEach(([id,m])=>{
-    if(id===sid&&Engine.theme){
+    if(id===act&&Engine.theme){
       const beat=60/Engine.theme.bpm,ph=reduce?0.5:((now/1000)%beat)/beat;
       m.setRadius(m._r+5*(1-ph));if(m.options.color!=='#ffffff')m.setStyle({color:'#ffffff'});
-    }else if(m.options.radius!==m._r||m.options.color!=='#120b1f'){m.setRadius(m._r);m.setStyle({color:'#120b1f'});}
+    }else if(m.options.radius!==m._r||m.options.color!==m._c){m.setRadius(m._r);m.setStyle({color:m._c});}
   });
   requestAnimationFrame(animate);
 }
@@ -548,79 +739,131 @@ map.on('click',e=>{
   setPin(false);
   const s=nearestSpot(e.latlng.lat,e.latlng.lng,40)||newSpot(e.latlng.lat,e.latlng.lng,{name:'New spot'});
   s.pinned=true;s.fav=true;save();refresh();
-  note('Spot saved as a favourite. Rename it in "Favourite & frequent spots".');
+  openEditors.add('p'+s.id+'-');
+  const box=document.querySelector('.spotcard[data-spot="'+s.id+'"] details');
+  if(box){box.open=true;box.scrollIntoView({behavior:'smooth',block:'center'});const n=box.querySelector('input');if(n){n.focus();n.select();}}
+  note('Spot added. Give it a name and a song, and tick 🌍 to share it.');
 });
 
 /* ---------- side panel ---------- */
+const openEditors=new Set();
+function spotLabel(s){document.querySelectorAll('.spotcard[data-spot="'+s.id+'"] .nm').forEach(el=>{el.textContent=(s.fav?'★ ':'')+s.name+(s.song?' ♪':'');});}
+function syncSpotInputs(s,src){document.querySelectorAll('[data-name-of="'+s.id+'"]').forEach(o=>{if(o!==src)o.value=s.name;});}
+function spotEditor(s,pfx,withName){
+  const d=document.createElement('details');
+  d.innerHTML='<summary>Song &amp; sharing</summary><div class="fields">'
+    +(withName?'<input type="text" id="'+pfx+'n" data-name-of="'+s.id+'" aria-label="Spot name" placeholder="Name">':'')
+    +'<input type="text" id="'+pfx+'s" placeholder="Song: title – artist" aria-label="Song title">'
+    +'<input type="url" id="'+pfx+'u" placeholder="Song link (YouTube, Spotify…)" aria-label="Song link">'
+    +'<label class="check"><input type="checkbox" id="'+pfx+'pr"> <span>🔒 Private place <small>Never shared. Your route within '+PRIVACY_RADIUS+' m is hidden on shared days.</small></span></label>'
+    +'<label class="check"><input type="checkbox" id="'+pfx+'pu"> <span>🌍 Public spot <small>'+(!sb?'Needs the community setup (config.js).':uid()?'Others see its name, place and song.':'Shared once you log in.')+'</small></span></label>'
+    +'</div>';
+  const q=x=>d.querySelector('#'+pfx+x);
+  const nm=q('n'),st=q('s'),u=q('u'),pr=q('pr'),pu=q('pu');
+  if(nm){nm.value=s.name;nm.addEventListener('input',()=>{s.name=nm.value;save();syncSpotInputs(s,nm);updateNow();if(s.public)scheduleSync();});nm.addEventListener('change',()=>{drawMap();spotLabel(s);});}
+  st.value=s.song||'';u.value=s.url||'';pr.checked=!!s.private;pu.checked=!!s.public;pu.disabled=!sb;
+  if(s.song||s.url||s.public||s.private||openEditors.has(pfx))d.open=true;
+  d.addEventListener('toggle',()=>{if(d.open)openEditors.add(pfx);else openEditors.delete(pfx);});
+  st.addEventListener('input',()=>{s.song=st.value;save();updateNow();spotLabel(s);if(s.public)scheduleSync();});
+  u.addEventListener('change',()=>{s.url=u.value.trim();save();updateNow();if(s.public)scheduleSync();});
+  pr.addEventListener('change',()=>{
+    s.private=pr.checked;
+    if(s.private&&s.public){s.public=false;pu.checked=false;unpublishSpot(s);}
+    save();refreshSoft();scheduleSync();
+  });
+  pu.addEventListener('change',()=>{
+    if(pu.checked&&s.demo){pu.checked=false;note('Sample places cannot be shared. Add your own spot on the map.');return;}
+    s.public=pu.checked;
+    if(s.public&&s.private){s.private=false;pr.checked=false;}
+    if(s.public){s.fav=true;scheduleSync();if(!uid())note('Saved as public. It will be shared when you log in (Community panel).');}
+    else unpublishSpot(s);
+    save();refreshSoft();
+  });
+  return d;
+}
+function tags(s){
+  return (s.private?'<span class="tag priv">🔒 Private</span>':'')+(s.public?'<span class="tag pub">🌍 Public</span>':'')
+    +(isFrequent(s)?'<span class="freq">Frequent · '+daysVisited(s.id)+' days</span>':'');
+}
 function renderList(){
   const el=$('#list');
-  if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement.closest('.side'))return;
+  if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement.closest('#list'))return;
   const day=D();
-  el.innerHTML='<div><h2>Your places '+(data.demo?'<span class="badge">sample</span>':'')+'</h2><p class="hint">Rename a place, star it, attach a real song, hit ▶ to hear its melody.</p></div>';
+  el.innerHTML=view
+    ?'<div><h2>'+esc(view.author)+'\'s places</h2><p class="hint">Hit ▶ to hear each place. Songs open in a new tab.</p></div>'
+    :'<div><h2>Your places '+(day.demo?'<span class="badge">sample</span>':'')+'</h2><p class="hint">Rename a place, star it, add a song, hit ▶ to hear its melody.</p></div>';
   if(!day.visits.length){
     const e=document.createElement('div');e.className='empty';
-    e.textContent=day.points.length?'No stop detected yet. A place shows up once you stay about 4 minutes in the same spot.':'No places on this day yet.';
+    e.textContent=day.points.length?'No stop detected yet. A place shows up once you stay about 4 minutes in the same spot.':'No places on this day. You can still add spots on the map.';
     el.appendChild(e);
   }
   day.visits.forEach(v=>{
-    const s=data.spots[v.spot];if(!s)return;
+    const s=SP(v.spot);if(!s)return;
     const th=themeFor(v),c=document.createElement('div'),heard=heardAt(v.start,v.end);
     c.className='place';c.style.setProperty('--c',colorFor(s.id));
-    c.innerHTML=
-      '<div class="row"><input class="pname" type="text" id="n-'+v.id+'" data-spot="'+s.id+'" aria-label="Place name">'
-      +'<button class="star" type="button" aria-pressed="'+!!s.fav+'" aria-label="Favourite" title="Favourite">'+(s.fav?'★':'☆')+'</button>'
-      +'<button type="button" data-play="'+v.id+'">▶ Listen</button></div>'
-      +'<div class="row"><span class="time">'+fmt(v.start)+' → '+fmt(v.end)+' · '+dur(v.end-v.start)+'</span>'+(isFrequent(s)?'<span class="freq">Frequent · '+daysVisited(s.id)+' days</span>':'')+'</div>'
-      +'<div class="row"><span class="chip">'+th.mode+' · '+th.bpm+' BPM · '+moment(th.hour)+'</span></div>'
-      +(heard.length?'<div class="heard">'+heardHTML(heard,3)+'</div>':'')
-      +'<details><summary>Attach a real song</summary><div class="fields">'
-      +'<input type="text" id="s-'+v.id+'" placeholder="Title – artist" aria-label="Song title">'
-      +'<input type="url" id="u-'+v.id+'" placeholder="YouTube, Spotify link…" aria-label="Song link"></div></details>';
-    const n=c.querySelector('.pname'),st=c.querySelector('#s-'+v.id),u=c.querySelector('#u-'+v.id);
-    n.value=s.name;st.value=s.song||'';u.value=s.url||'';
-    if(s.song||s.url)c.querySelector('details').open=true;
-    n.addEventListener('input',()=>{
-      s.name=n.value;save();
-      document.querySelectorAll('.pname[data-spot="'+s.id+'"]').forEach(o=>{if(o!==n)o.value=n.value;});
-      updateNow();
-    });
-    n.addEventListener('change',()=>{drawMap();renderSpots();});
-    st.addEventListener('input',()=>{s.song=st.value;save();updateNow();});
-    u.addEventListener('change',()=>{s.url=u.value.trim();save();updateNow();});
-    c.querySelector('.star').addEventListener('click',()=>{s.fav=!s.fav;save();refresh();});
+    const head=view
+      ?'<div class="row top"><span class="pname-ro">'+esc(s.name)+'</span><button type="button" data-play="'+v.id+'">▶ Listen</button></div>'
+      :'<div class="row top"><input class="pname" type="text" id="n-'+v.id+'" data-name-of="'+s.id+'" aria-label="Place name">'
+        +'<button class="star" type="button" aria-pressed="'+!!s.fav+'" aria-label="Favourite" title="Favourite">'+(s.fav?'★':'☆')+'</button>'
+        +'<button type="button" data-play="'+v.id+'">▶ Listen</button></div>';
+    c.innerHTML=head
+      +'<div class="row"><span class="time">'+fmt(v.start)+' → '+fmt(v.end)+' · '+dur(v.end-v.start)+'</span>'+(view?'':tags(s))+'</div>'
+      +'<div class="row"><span class="chip">'+th.mode+' · '+th.bpm+' BPM · '+moment(th.hour)+'</span>'+(view&&songHTML(s)?'<span>'+songHTML(s)+'</span>':'')+'</div>'
+      +(heard.length?'<div class="heard">'+heardHTML(heard,3)+'</div>':'');
+    if(!view){
+      const n=c.querySelector('.pname');n.value=s.name;
+      n.addEventListener('input',()=>{s.name=n.value;save();syncSpotInputs(s,n);updateNow();if(s.public)scheduleSync();});
+      n.addEventListener('change',()=>{drawMap();spotLabel(s);});
+      c.querySelector('.star').addEventListener('click',()=>{s.fav=!s.fav;save();refresh();});
+      c.appendChild(spotEditor(s,'v'+v.id+'-',false));
+    }
     c.querySelector('[data-play]').addEventListener('click',()=>togglePlace(v));
     el.appendChild(c);
   });
 }
 function renderSpots(){
   const el=$('#spots');
-  const list=Object.values(data.spots).filter(s=>s.fav||isFrequent(s)).sort((a,b)=>daysVisited(b.id)-daysVisited(a.id));
-  el.innerHTML='<div style="margin-bottom:8px"><h2>Favourite &amp; frequent spots</h2><p class="hint">Star a place, add one on the map, or visit it on 3 different days.</p></div>';
+  if(view){el.innerHTML='';el.hidden=true;return;}
+  el.hidden=false;
+  if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement.closest('#spots'))return;
+  const list=Object.values(data.spots).filter(s=>s.fav||s.pinned||s.public||s.private||isFrequent(s))
+    .sort((a,b)=>(b.public-a.public)||(daysVisited(b.id)-daysVisited(a.id)));
+  el.innerHTML='<div style="margin-bottom:8px"><h2>Your spots</h2><p class="hint">Favourites, pinned places, public spots and places you visit often. Add one anywhere with "Add a spot on the map", no recording needed.</p></div>';
   const box=document.createElement('div');box.className='spots';el.appendChild(box);
   if(!list.length){box.innerHTML='<div class="empty">None yet.</div>';return;}
   list.forEach(s=>{
     const r=document.createElement('div'),n=daysVisited(s.id);
-    r.className='spotrow';r.style.setProperty('--c',colorFor(s.id));
-    r.innerHTML='<span class="dot"></span><span class="nm">'+(s.fav?'★ ':'')+esc(s.name)+'</span>'
-      +'<span class="ct">'+(n?n+' day'+(n>1?'s':''):'not visited yet')+'</span>'
-      +(isFrequent(s)?'<span class="freq">Frequent</span>':'')
-      +'<button type="button" data-play="spot:'+s.id+'">▶ Listen</button>';
-    r.querySelector('button').addEventListener('click',()=>toggleSpot(s));
+    r.className='spotcard';r.dataset.spot=s.id;r.style.setProperty('--c',colorFor(s.id));
+    r.innerHTML='<div class="row top"><span class="dot"></span><span class="nm" title="Show on the map">'+(s.fav?'★ ':'')+esc(s.name)+(s.song?' ♪':'')+'</span>'
+      +'<span class="ct">'+(n?n+' day'+(n>1?'s':''):'pinned')+'</span>'
+      +'<button type="button" data-play="spot:'+s.id+'">▶ Listen</button></div>'
+      +(tags(s)?'<div class="row">'+tags(s)+'</div>':'');
+    r.querySelector('[data-play]').addEventListener('click',()=>toggleSpot(s));
     r.querySelector('.nm').addEventListener('click',()=>map.setView([s.lat,s.lng],16));
+    r.appendChild(spotEditor(s,'p'+s.id+'-',true));
     box.appendChild(r);
   });
 }
 function renderDays(){
-  const sel=$('#daySel'),keys=Object.keys(data.days).filter(k=>data.days[k].points.length||data.days[k].visits.length).sort().reverse();
+  const sel=$('#daySel');
+  if(view){sel.innerHTML='<option>'+esc(dayLabel(view.dayKey))+'</option>';sel.disabled=true;return;}
+  sel.disabled=false;
+  const keys=Object.keys(data.days).filter(k=>data.days[k].points.length||data.days[k].visits.length).sort().reverse();
   if(!keys.includes(curDay))keys.unshift(curDay);
-  sel.innerHTML=keys.map(k=>'<option value="'+k+'"'+(k===curDay?' selected':'')+'>'+dayLabel(k)+'</option>').join('');
+  sel.innerHTML=keys.map(k=>'<option value="'+k+'"'+(k===curDay?' selected':'')+'>'+dayLabel(k)+(data.days[k]&&data.days[k].shared?' · shared':'')+'</option>').join('');
+}
+function renderViewbar(){
+  const vb=$('#viewbar');vb.classList.toggle('show',!!view);
+  if(view)$('#viewText').innerHTML='Viewing <b>'+esc(view.author)+'</b>\'s day · '+esc(dayLabel(view.dayKey))+'. Hit ▶ Replay to hear it.';
+  ['#btnMark','#btnPin','#btnLfm'].forEach(id=>{$(id).disabled=!!view;});
 }
 function legend(){
   const day=D(),n=day.visits.length,p=new Set(day.visits.map(v=>v.spot)).size;
   $('#legend').textContent=day.points.length?n+' stop'+(n!==1?'s':'')+' · '+p+' place'+(p!==1?'s':'')+' · '+day.points.length+' GPS points':'';
 }
+function refreshSoft(){renderList();renderSpots();drawMap();updateNow();}
 function refresh(){
-  buildSegs();renderDays();renderList();renderSpots();legend();drawMap();updateNow();
+  buildSegs();renderDays();renderViewbar();renderShare();renderList();renderSpots();legend();drawMap();updateNow();
   $('#btnReplay').disabled=!replay.total;
   if(!replay.on){replay.u=0;$('#scrub').value=0;$('#clock').textContent=replay.total?fmt(timeAt(0)):'--:--';}
 }
@@ -630,6 +873,7 @@ $('#lfmUser').value=data.lfm.user||'';$('#lfmKey').value=data.lfm.key||'';
 $('#lfmUser').addEventListener('change',e=>{data.lfm.user=e.target.value.trim();save();});
 $('#lfmKey').addEventListener('change',e=>{data.lfm.key=e.target.value.trim();save();});
 async function loadTracks(){
+  if(view)return;
   data.lfm.user=$('#lfmUser').value.trim();data.lfm.key=$('#lfmKey').value.trim();save();
   const {user,key}=data.lfm;
   if(!user||!key){note('Enter your Last.fm username and API key first.');return;}
@@ -654,23 +898,31 @@ async function loadTracks(){
     note(day.tracks.length?day.tracks.length+' tracks loaded. Each place now shows what you heard there.':'No tracks were scrobbled during this day.');
   }catch(e){
     note('Last.fm: '+(e.message||'could not load tracks')+'. Check your username and API key.');
-  }finally{btn.disabled=false;btn.textContent="Load this day's tracks";}
+  }finally{btn.disabled=!!view;btn.textContent="Load this day's tracks";}
 }
 $('#btnLfm').addEventListener('click',loadTracks);
 
 /* ---------- GPS ---------- */
 let watchId=null;
 function setRec(on){const b=$('#btnRec');b.textContent=on?'■ Stop recording':'Record my day';b.classList.toggle('rec',on);b.classList.toggle('primary',!on);}
+function dropDemo(){
+  if(!data.demo)return;
+  Object.keys(data.spots).forEach(id=>{if(data.spots[id].demo)delete data.spots[id];});
+  Object.keys(data.days).forEach(k=>{if(data.days[k].demo)delete data.days[k];});
+  data.demo=false;
+}
+let lastShareSync=0;
 function onPos(pos){
   const pt={lat:pos.coords.latitude,lng:pos.coords.longitude,t:Date.now()};
-  if(data.demo){data={days:{},spots:{},lfm:data.lfm,demo:false};}
+  dropDemo();
   const k=dayKey(pt.t);
-  if(curDay!==k){curDay=k;fitFor=null;}
-  const day=D(),last=day.points[day.points.length-1];
+  if(curDay!==k){curDay=k;if(!view)fitFor=null;}
+  const day=myDay(k),last=day.points[day.points.length-1];
   if(!last||dist(last,pt)>12||pt.t-last.t>60000){
     day.points.push(pt);updateVisits(day);save();
-    if(day.points.length===1)fitFor=null;
-    refresh();
+    if(day.points.length===1&&!view)fitFor=null;
+    if(day.shared&&pt.t-lastShareSync>60000){lastShareSync=pt.t;scheduleSync();}
+    if(!view)refresh();
   }
   note('Recording… keep this page open.');
 }
@@ -690,23 +942,31 @@ function stopGPS(){if(watchId!==null){try{navigator.geolocation.clearWatch(watch
 /* ---------- buttons ---------- */
 $('#btnRec').addEventListener('click',()=>watchId===null?startGPS():(stopGPS(),note('')));
 $('#btnMark').addEventListener('click',()=>{
-  const day=data.demo?null:D(),l=day&&day.points[day.points.length-1];
+  const day=data.demo?null:myDay(dayKey(Date.now())),l=day&&day.points[day.points.length-1];
   if(!l){note('Start recording first: saving where you are needs your current position. You can also use "Add a spot on the map".');return;}
   const s=nearestSpot(l.lat,l.lng,60)||newSpot(l.lat,l.lng,{name:'Saved spot'});
   s.pinned=true;s.fav=true;save();refresh();
-  note('Saved as a favourite. Rename it in "Favourite & frequent spots".');
+  note('Saved. Give it a name and a song in "Your spots".');
 });
 $('#btnPin').addEventListener('click',()=>setPin(!pinMode));
-$('#btnDemo').addEventListener('click',()=>{stopGPS();if(replay.on)stopReplay();stopAll();const lfm=data.lfm;data=demo();data.lfm=lfm;curDay=Object.keys(data.days).sort().pop();fitFor=null;save();refresh();note('');});
+$('#btnDemo').addEventListener('click',()=>{
+  stopGPS();if(replay.on)stopReplay();stopAll();view=null;
+  const keep=Object.values(data.spots).filter(s=>!s.demo&&(s.pinned||s.public));
+  const lfm=data.lfm,show=data.showCommunity;
+  data=demo();data.lfm=lfm;data.showCommunity=show;keep.forEach(s=>{data.spots[s.id]=s;});
+  curDay=Object.keys(data.days).sort().pop();fitFor=null;save();refresh();note('');
+});
 let clearArmed=null;
 $('#btnClear').addEventListener('click',e=>{
   const b=e.currentTarget;
   if(!clearArmed){b.textContent='Sure? Click again';clearArmed=setTimeout(()=>{b.textContent='Clear all';clearArmed=null;},3000);return;}
   clearTimeout(clearArmed);clearArmed=null;b.textContent='Clear all';
-  stopGPS();if(replay.on)stopReplay();stopAll();
-  data={days:{},spots:{},lfm:data.lfm,demo:false};curDay=dayKey(Date.now());fitFor=null;save();refresh();
+  stopGPS();if(replay.on)stopReplay();stopAll();view=null;
+  data={days:{},spots:{},lfm:data.lfm,showCommunity:data.showCommunity,demo:false};curDay=dayKey(Date.now());fitFor=null;save();refresh();
+  note('Cleared on this device. Anything you shared stays online until you untick it or delete it in Supabase.');
 });
-$('#daySel').addEventListener('change',e=>{if(replay.on)stopReplay();stopAll();curDay=e.target.value;fitFor=null;refresh();});
+$('#btnBack').addEventListener('click',exitView);
+$('#daySel').addEventListener('change',e=>{if(view)return;if(replay.on)stopReplay();stopAll();curDay=e.target.value;fitFor=null;refresh();});
 $('#btnReplay').addEventListener('click',()=>replay.on?stopReplay():startReplay());
 $('#scrub').addEventListener('input',e=>{
   buildSegs();if(!replay.total)return;
@@ -717,6 +977,7 @@ $('#scrub').addEventListener('input',e=>{
 });
 
 refresh();
+initAuth();
 })();
 </script>
 </body>
